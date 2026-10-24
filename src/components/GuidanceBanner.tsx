@@ -16,7 +16,7 @@ interface Props {
 export default function GuidanceBanner({ guidance, trackingFailure, lang }: Props) {
   if (!guidance || !guidance.ruleId) return null;
   const id = guidance.ruleId;
-  const text = ruleText(lang, id);
+  const text = ruleText(lang, id, guidance.direction);
   const positive = id === 'C6';
   const color = severityColor(guidance.severity, positive);
   const hint = id === 'T1' ? failureHint(lang, trackingFailure) : '';

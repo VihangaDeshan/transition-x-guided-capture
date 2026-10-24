@@ -13,9 +13,11 @@ interface Props {
   elapsedMs: number;
   sessionState: SessionState;
   lang: Lang;
+  /** Share of surfaces seen from 2+ angles, or null when not measured. */
+  coverage?: number | null;
 }
 
-export default function StatusLine({ phase, elapsedMs, sessionState, lang }: Props) {
+export default function StatusLine({ phase, elapsedMs, sessionState, lang, coverage }: Props) {
   const recording = phase === 'recording' || phase === 'stopping';
   const pill =
     sessionState === 'SCANNING'
@@ -36,12 +38,21 @@ export default function StatusLine({ phase, elapsedMs, sessionState, lang }: Pro
       ) : (
         <View />
       )}
-      {pill ? (
-        <View style={[styles.pill, { borderColor: pill.color }]}>
-          <View style={[styles.pillDot, { backgroundColor: pill.color }]} />
-          <Text style={styles.pillText}>{pill.text}</Text>
-        </View>
-      ) : null}
+      <View style={styles.right}>
+        {coverage !== null && coverage !== undefined ? (
+          <View style={[styles.pill, { borderColor: theme.accent, marginRight: 6 }]} testID="coverage-pill">
+            <Text style={styles.pillText}>
+              {uiText(lang, 'coverageLabel')} {Math.round(coverage * 100)}%
+            </Text>
+          </View>
+        ) : null}
+        {pill ? (
+          <View style={[styles.pill, { borderColor: pill.color }]}>
+            <View style={[styles.pillDot, { backgroundColor: pill.color }]} />
+            <Text style={styles.pillText}>{pill.text}</Text>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -55,6 +66,7 @@ const styles = StyleSheet.create({
   recDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.danger, marginRight: 6 },
   recText: { color: theme.danger, fontWeight: '800', marginRight: 8, letterSpacing: 1 },
   time: { color: theme.text, fontVariant: ['tabular-nums'], fontWeight: '600' },
+  right: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
   pill: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(14,17,22,0.75)',
     borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1,

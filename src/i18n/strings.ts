@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // All user-facing text. Guidance text is resolved here from the rule identifier (TDD v1.0 11.2),
 // so a translation or wording change never touches native code.
-import type { RuleId, TrackingFailure } from '../../modules/guided-capture';
+import type { Direction, RuleId, TrackingFailure } from '../../modules/guided-capture';
 
 export type Lang = 'en' | 'si';
 
@@ -27,6 +27,10 @@ const rulesEn: RuleTable = {
   T4: { short: 'Another app is using the camera — close it and try again' },
   T5: { short: 'Something went wrong — please restart the scan' },
   T6: { short: "You're moving too fast" },
+  T7: {
+    short: 'That part was poor — go back and film it again',
+    detail: 'The last few seconds were too dark, too blurry or lost tracking. Walk back a little and film that area slowly.',
+  },
   G1: {
     short: 'Turn more slowly',
     detail: 'Fast turns leave no overlap between pictures. Take about two seconds to turn a quarter of the way.',
@@ -41,23 +45,36 @@ const rulesEn: RuleTable = {
     detail:
       'Turning on the spot shows the room from only one point, so it cannot be measured in 3D. Take a few steps sideways while you film.',
   },
+  G5: { short: 'Move smoothly — no sudden turns', detail: 'Start and stop turning gently, like carrying a full cup.' },
   L1: { short: "It's too dark here — turn on a light" },
   L2: { short: 'Too bright — avoid pointing at the window' },
   L3: {
     short: 'The image is blurry — move more slowly',
     detail: 'If you are already moving slowly, wipe the camera lens with a soft cloth.',
   },
-  L4: { short: 'Clean the camera lens' },
-  L5: { short: 'Wait for the camera to focus' },
+  L4: {
+    short: 'Clean the camera lens',
+    detail: 'The picture stays soft even though you are still and the light is good. Wipe the lens with a soft cloth.',
+  },
+  L5: { short: 'Hold still a moment — the camera is focusing' },
   S1: { short: 'Point at a corner or an object, not a blank wall' },
   S2: { short: 'Too close — step back' },
   S3: { short: 'Too far — move closer' },
-  S4: { short: 'Mirror or glass — move slowly past it' },
-  C1: { short: 'Turn towards the unscanned side' },
+  S4: {
+    short: 'Mirror or glass — move slowly past it',
+    detail: 'Reflections confuse the 3D model. Film the frame of the mirror or window, not into it.',
+  },
+  C1: { short: 'Turn towards the part you have not filmed' },
   C2: { short: 'Look up and down too' },
-  C3: { short: 'This area needs more views' },
-  C4: { short: 'A corner is still missing' },
-  C5: { short: 'Return to where you started' },
+  C3: {
+    short: 'Film this from another spot — erase the stripes',
+    detail: 'Striped areas were seen from one place only. Take two steps sideways and look at them again.',
+  },
+  C4: { short: 'A corner of the room is still missing' },
+  C5: {
+    short: 'Walk back to where you started',
+    detail: 'Finishing where you began lets the 3D model close the loop and stay straight.',
+  },
   C6: { short: 'This scan looks good — you can stop' },
 } as RuleTable;
 
@@ -74,6 +91,10 @@ const rulesSi: RuleTable = {
   T4: { short: 'වෙනත් app එකක් camera එක පාවිච්චි කරනවා — ඒක වහලා ආයෙ උත්සාහ කරන්න' },
   T5: { short: 'මොකක්හරි වැරැද්දක් — scan එක ආයෙ පටන් ගන්න' },
   T6: { short: 'ඔයා ගොඩක් ඉක්මනට move වෙනවා' },
+  T7: {
+    short: 'ඒ කොටස හොඳ නෑ — ආපහු ගිහින් ආයෙ video කරන්න',
+    detail: 'අන්තිම තත්පර කිහිපය අඳුරුයි / බොඳයි / tracking නැති වුණා. ටිකක් ආපහු ගිහින් ඒ තැන හෙමින් video කරන්න.',
+  },
   G1: {
     short: 'හෙමින් කරකවන්න',
     detail: 'ඉක්මනට හැරෙව්වොත් පින්තූර අතර overlap නැති වෙනවා. කාලක් හැරෙන්න තත්පර දෙකක් විතර ගන්න.',
@@ -85,22 +106,49 @@ const rulesSi: RuleTable = {
     detail:
       'එක තැනක හිටගෙන කරකැවුණොත් කාමරය එක ලක්ෂයකින් විතරයි පේන්නේ, ඒ නිසා 3D මනින්න බෑ. video කරන ගමන් පැත්තට පියවර කිහිපයක් යන්න.',
   },
+  G5: { short: 'සුමටව move කරන්න — එකපාරට හරවන්න එපා', detail: 'පිරුණු කෝප්පයක් අරන් යනවා වගේ හෙමින් පටන් අරන් හෙමින් නවත්තන්න.' },
   L1: { short: 'ආලෝකය මදි — ලයිට් එකක් දාන්න' },
   L2: { short: 'ඉතා දීප්තිමත් — ජනේලයට එල්ල කරන්න එපා' },
   L3: { short: 'රූපය බොඳයි — හෙමින් යන්න', detail: 'දැනටමත් හෙමින් නම්, කැමරා කාචය පිරිසිදු කරන්න.' },
-  L4: { short: 'කැමරා කාචය පිරිසිදු කරන්න' },
-  L5: { short: 'focus වෙනකම් රැඳෙන්න' },
+  L4: {
+    short: 'කැමරා කාචය පිරිසිදු කරන්න',
+    detail: 'phone එක නොසෙල්වී, ආලෝකය හොඳ වුණත් රූපය බොඳයි. මෘදු රෙද්දකින් කාචය පිහදන්න.',
+  },
+  L5: { short: 'ටිකක් නවතින්න — කැමරාව focus වෙනවා' },
   S1: { short: 'හිස් බිත්තියක් — කොනක් හෝ භාණ්ඩයක් බලන්න' },
   S2: { short: 'ඉතා ළඟයි — පිටිපස්සට යන්න' },
   S3: { short: 'ඉතා දුරයි — ළං වෙන්න' },
-  S4: { short: 'කැඩපත/වීදුරු — හෙමින් යන්න' },
-  C1: { short: 'scan නොකරපු පැත්තට හැරෙන්න' },
+  S4: {
+    short: 'කැඩපත/වීදුරු — හෙමින් යන්න',
+    detail: 'පරාවර්තන 3D model එක අවුල් කරනවා. කැඩපතේ/ජනේලයේ රාමුව video කරන්න, ඇතුළට නෙවෙයි.',
+  },
+  C1: { short: 'video නොකරපු පැත්තට හැරෙන්න' },
   C2: { short: 'උඩත් පහළත් බලන්න' },
-  C3: { short: 'මේ ප්‍රදේශයට තව කෝණ ඕනේ' },
-  C4: { short: 'කොනක් තවම ඉතුරුයි' },
-  C5: { short: 'පටන් ගත්ත තැනට ආපහු එන්න' },
+  C3: {
+    short: 'මේක වෙන තැනකින් video කරන්න — රටා මකන්න',
+    detail: 'රටා තියෙන තැන් එක තැනකින් විතරයි දැක්කේ. පැත්තට පියවර දෙකක් ගිහින් ආයෙ බලන්න.',
+  },
+  C4: { short: 'කාමරේ කොනක් තවම ඉතුරුයි' },
+  C5: {
+    short: 'පටන් ගත්ත තැනට ආපහු එන්න',
+    detail: 'පටන් ගත්ත තැනින් ඉවර කළාම 3D model එක loop එක close කරලා කෙළින් තියාගන්නවා.',
+  },
   C6: { short: 'scan එක හොඳයි — දැන් නවත්තන්න පුළුවන්' },
 } as RuleTable;
+
+type Directional = Partial<Record<RuleId, Partial<Record<Direction, string>>>>;
+
+const directionalEn: Directional = {
+  C1: { LEFT: 'Turn left ← — you have not filmed that side', RIGHT: 'Turn right → — you have not filmed that side', BEHIND: 'Turn around ↻ — the side behind you is not filmed' },
+  C2: { UP: 'Look up ↑ — film where the walls meet the ceiling', DOWN: 'Look down ↓ — film where the walls meet the floor' },
+  C4: { LEFT: 'A corner is missing — to your left ←', RIGHT: 'A corner is missing — to your right →', BEHIND: 'A corner is missing — behind you ↻' },
+};
+
+const directionalSi: Directional = {
+  C1: { LEFT: 'වමට හැරෙන්න ← — ඒ පැත්ත video කරලා නෑ', RIGHT: 'දකුණට හැරෙන්න → — ඒ පැත්ත video කරලා නෑ', BEHIND: 'ආපස්සට හැරෙන්න ↻ — පිටිපස්ස video කරලා නෑ' },
+  C2: { UP: 'උඩ බලන්න ↑ — බිත්ති සිවිලිමට එකතු වෙන තැන', DOWN: 'පහළ බලන්න ↓ — බිත්ති බිමට එකතු වෙන තැන' },
+  C4: { LEFT: 'කොනක් ඉතුරුයි — ඔයාගේ වම් පැත්තේ ←', RIGHT: 'කොනක් ඉතුරුයි — ඔයාගේ දකුණු පැත්තේ →', BEHIND: 'කොනක් ඉතුරුයි — ඔයාට පිටිපස්සේ ↻' },
+};
 
 const ui = {
   en: {
@@ -167,6 +215,14 @@ const ui = {
     deleteConfirm: 'Delete',
     cancel: 'Cancel',
     deletedNote: 'Deleted from this phone.',
+    voice: 'Voice',
+    stripes: 'Stripes',
+    coverageLabel: 'Seen from 2+ angles',
+    coverageMeasured: 'Surfaces seen from 2+ angles',
+    loopClosed: 'Returned to start',
+    yes: 'Yes',
+    no: 'No',
+    distance: 'Distance',
   },
   si: {
     appTitle: 'Guided Capture',
@@ -232,6 +288,14 @@ const ui = {
     deleteConfirm: 'මකන්න',
     cancel: 'අවලංගු කරන්න',
     deletedNote: 'මේ phone එකෙන් මැකුවා.',
+    voice: 'හඬ',
+    stripes: 'රටා',
+    coverageLabel: 'කෝණ 2+ කින් දැක්කා',
+    coverageMeasured: 'කෝණ 2+ කින් දැකපු මතුපිට',
+    loopClosed: 'පටන් ගත් තැනට ආවා',
+    yes: 'ඔව්',
+    no: 'නෑ',
+    distance: 'දුර',
   },
 };
 
@@ -256,13 +320,19 @@ const failureHintSi: Record<TrackingFailure, string> = {
 };
 
 export const RULE_IDS: RuleId[] = [
-  'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'G1', 'G2', 'G3', 'G4',
+  'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'G1', 'G2', 'G3', 'G4', 'G5',
   'L1', 'L2', 'L3', 'L4', 'L5', 'S1', 'S2', 'S3', 'S4', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6',
 ];
 
-export function ruleText(lang: Lang, id: RuleId): RuleText {
+/** Text for a rule; directional rules (C1, C2, C4) get the wording for their arrow. */
+export function ruleText(lang: Lang, id: RuleId, direction?: Direction | null): RuleText {
   const table = lang === 'si' ? rulesSi : rulesEn;
-  return table[id] ?? rulesEn[id] ?? { short: id };
+  const base = table[id] ?? rulesEn[id] ?? { short: id };
+  if (direction) {
+    const d = (lang === 'si' ? directionalSi : directionalEn)[id]?.[direction] ?? directionalEn[id]?.[direction];
+    if (d) return { ...base, short: d };
+  }
+  return base;
 }
 
 export function uiText<K extends UiKey>(lang: Lang, key: K): (typeof ui.en)[K] {
@@ -273,4 +343,4 @@ export function failureHint(lang: Lang, f: TrackingFailure): string {
   return (lang === 'si' ? failureHintSi : failureHintEn)[f] ?? '';
 }
 
-export const __forTests = { rulesEn, rulesSi, ui };
+export const __forTests = { rulesEn, rulesSi, ui, directionalEn, directionalSi };

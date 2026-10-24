@@ -3,14 +3,15 @@ import { captureReducer, initialCaptureState, nearSessionLimit } from '../src/st
 
 const guidance = (over: Partial<GuidancePayload> = {}): GuidancePayload => ({
   ruleId: 'G4', severity: 'CRITICAL', tier: 1, sessionState: 'SCANNING', canStop: false, escalated: false,
-  elapsedMs: 5000, coverage: { method: 'POSE_TRAIL', surfacesSeenFromTwoPlusAngles: 0, observedVoxelCount: 0, coveredVoxelCount: 0 },
+  elapsedMs: 5000, direction: null, coverage: { method: 'POSE_TRAIL', surfacesSeenFromTwoPlusAngles: 0, observedVoxelCount: 0, coveredVoxelCount: 0 },
   ...over,
 });
 
 const status = (over: Partial<StatusPayload> = {}): StatusPayload => ({
   sessionState: 'SCANNING', trackingStatus: 'TRACKING', trackingFailure: 'NONE', elapsedMs: 6000, canStop: false,
   keyframeCount: 3, pathLengthM: 0.5, maxDistanceFromStartM: 0.4, thermalStatus: 0, position: [0.2, 0.1],
-  trailAppend: [[0.1, 0]], maxSessionMs: 600000, warnBeforeEndMs: 60000, ...over,
+  trailAppend: [[0.1, 0]], coverageMethod: 'VOXEL_GRID', coverageFraction: 0.42, coverageObserved: 300,
+  coverageCovered: 126, distanceToSurfaceM: 1.8, maxSessionMs: 600000, warnBeforeEndMs: 60000, ...over,
 });
 
 describe('capture reducer', () => {
@@ -30,6 +31,8 @@ describe('capture reducer', () => {
     expect(s.trail).toHaveLength(3);
     expect(s.position).toEqual([0.2, 0.1]);
     expect(s.elapsedMs).toBe(6000);
+    expect(s.coverageFraction).toBeCloseTo(0.42);
+    expect(s.coverageMethod).toBe('VOXEL_GRID');
     s = captureReducer(s, { type: 'stop' });
     expect(s.phase).toBe('stopping');
   });

@@ -25,6 +25,10 @@ export interface CaptureState {
   signal: SignalPayload | null;
   maxSessionMs: number;
   warnBeforeEndMs: number;
+  coverageMethod: string;
+  coverageFraction: number;
+  coverageObserved: number;
+  distanceToSurfaceM: number | null;
   error: string | null;
 }
 
@@ -42,6 +46,10 @@ export const initialCaptureState: CaptureState = {
   signal: null,
   maxSessionMs: 600000,
   warnBeforeEndMs: 60000,
+  coverageMethod: 'POSE_TRAIL',
+  coverageFraction: 0,
+  coverageObserved: 0,
+  distanceToSurfaceM: null,
   error: null,
 };
 
@@ -89,6 +97,10 @@ export function captureReducer(state: CaptureState, action: CaptureAction): Capt
         keyframeCount: p.keyframeCount,
         maxSessionMs: p.maxSessionMs,
         warnBeforeEndMs: p.warnBeforeEndMs,
+        coverageMethod: p.coverageMethod ?? state.coverageMethod,
+        coverageFraction: p.coverageFraction ?? state.coverageFraction,
+        coverageObserved: p.coverageObserved ?? state.coverageObserved,
+        distanceToSurfaceM: p.distanceToSurfaceM ?? null,
       };
     }
     case 'signal':
@@ -98,6 +110,14 @@ export function captureReducer(state: CaptureState, action: CaptureAction): Capt
     default:
       return state;
   }
+}
+
+/**
+ * The honest coverage label (TDD 7.3) is shown only once the model has measured enough surfaces
+ * and only for methods that measure parallax; never for POSE_TRAIL.
+ */
+export function coverageVisible(s: CaptureState): boolean {
+  return s.coverageMethod !== 'POSE_TRAIL' && s.coverageMethod !== 'NONE' && s.coverageObserved >= 30;
 }
 
 /** True during the final minute before the enforced maximum session length (TDD 5.3). */

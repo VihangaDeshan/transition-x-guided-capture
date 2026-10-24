@@ -1,6 +1,6 @@
 import { __forTests, RULE_IDS, failureHint, ruleText, uiText } from '../src/i18n/strings';
 
-const PHASE1: string[] = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'G1', 'G2', 'G3', 'G4', 'L1', 'L2', 'L3', 'S1', 'C6'];
+const PHASE1: string[] = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'G1', 'G2', 'G3', 'G4', 'G5', 'L1', 'L2', 'L3', 'L4', 'L5', 'S1', 'S2', 'S3', 'S4', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
 
 describe('guidance strings', () => {
   it('has English and Sinhala text for every rule identifier', () => {

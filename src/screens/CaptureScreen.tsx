@@ -12,7 +12,8 @@ import StatusLine from '../components/StatusLine';
 import { APP_VERSION, THRESHOLDS } from '../config';
 import { hapticPattern, theme } from '../guidance/presentation';
 import { uiText, type Lang } from '../i18n/strings';
-import { captureReducer, initialCaptureState, nearSessionLimit } from '../state/captureState';
+import { VoicePolicy } from '../guidance/voice';
+import { captureReducer, coverageVisible, initialCaptureState, nearSessionLimit } from '../state/captureState';
 
 interface Props {
   lang: Lang;
@@ -24,8 +25,15 @@ export default function CaptureScreen({ lang, onCompleted, onExit }: Props) {
   const t = (k: Parameters<typeof uiText>[1]) => uiText(lang, k) as string;
   const [state, dispatch] = useReducer(captureReducer, initialCaptureState);
   const [debug, setDebug] = useState(false);
+  const [voice, setVoice] = useState(false);
+  const [stripes, setStripes] = useState(true);
   const completedRef = useRef(false);
   const lastRuleRef = useRef<string | null>(null);
+  const voiceRef = useRef(voice);
+  const langRef = useRef(lang);
+  const policyRef = useRef(new VoicePolicy());
+  voiceRef.current = voice;
+  langRef.current = lang;
 
   const finish = useCallback(
     (summary: SessionSummary) => {
@@ -45,6 +53,10 @@ export default function CaptureScreen({ lang, onCompleted, onExit }: Props) {
           if (pattern) Vibration.vibrate(pattern);
         }
         lastRuleRef.current = g.ruleId;
+        const say = policyRef.current.next(g, langRef.current, Date.now());
+        if (say && voiceRef.current) {
+          GuidedCapture.speak(say.text, say.languageTag, say.fallbackEnglish).catch(() => undefined);
+        }
       }),
       GuidedCapture.addListener('captureStatus', (s) => dispatch({ type: 'status', payload: s })),
       GuidedCapture.addListener('signalFrame', (s) => dispatch({ type: 'signal', payload: s })),
@@ -57,6 +69,15 @@ export default function CaptureScreen({ lang, onCompleted, onExit }: Props) {
   useEffect(() => {
     GuidedCapture.setDebugSignals(debug);
   }, [debug]);
+
+  useEffect(() => {
+    GuidedCapture.setCoverageOverlay(stripes);
+  }, [stripes]);
+
+  useEffect(() => {
+    if (voice) GuidedCapture.prepareSpeech().catch(() => undefined);
+    else GuidedCapture.stopSpeaking().catch(() => undefined);
+  }, [voice]);
 
   // Do not leave the screen by accident while recording.
   useEffect(() => {
@@ -101,7 +122,13 @@ export default function CaptureScreen({ lang, onCompleted, onExit }: Props) {
       <GuidedCaptureView style={StyleSheet.absoluteFill} />
 
       <View style={[styles.top, { paddingTop: top }]} pointerEvents="box-none">
-        <StatusLine phase={state.phase} elapsedMs={state.elapsedMs} sessionState={state.sessionState} lang={lang} />
+        <StatusLine
+          phase={state.phase}
+          elapsedMs={state.elapsedMs}
+          sessionState={state.sessionState}
+          lang={lang}
+          coverage={coverageVisible(state) ? state.coverageFraction : null}
+        />
         <View style={{ height: 12 }} />
         {state.phase !== 'preview' ? (
           <GuidanceBanner guidance={state.guidance} trackingFailure={state.trackingFailure} lang={lang} />
@@ -133,9 +160,17 @@ export default function CaptureScreen({ lang, onCompleted, onExit }: Props) {
               />
             )}
           </View>
-          <Pressable onPress={() => setDebug((d) => !d)} style={styles.debugBtn} accessibilityRole="button">
-            <Text style={[styles.debugText, debug && { color: theme.accent }]}>{t('debug')}</Text>
-          </Pressable>
+          <View style={styles.toggles}>
+            <Pressable onPress={() => setVoice((v) => !v)} style={styles.debugBtn} accessibilityRole="switch" accessibilityState={{ checked: voice }} testID="toggle-voice">
+              <Text style={[styles.debugText, voice && { color: theme.accent }]}>{t('voice')}</Text>
+            </Pressable>
+            <Pressable onPress={() => setStripes((v) => !v)} style={styles.debugBtn} accessibilityRole="switch" accessibilityState={{ checked: stripes }} testID="toggle-stripes">
+              <Text style={[styles.debugText, stripes && { color: theme.accent }]}>{t('stripes')}</Text>
+            </Pressable>
+            <Pressable onPress={() => setDebug((d) => !d)} style={styles.debugBtn} accessibilityRole="switch" accessibilityState={{ checked: debug }}>
+              <Text style={[styles.debugText, debug && { color: theme.accent }]}>{t('debug')}</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </View>
@@ -149,7 +184,8 @@ const styles = StyleSheet.create({
   bottomRow: { flexDirection: 'row', alignItems: 'flex-end' },
   controls: { flex: 1, alignItems: 'center', paddingHorizontal: 12 },
   big: { minWidth: 150, minHeight: 64, borderRadius: 32 },
-  debugBtn: { padding: 8, backgroundColor: 'rgba(14,17,22,0.6)', borderRadius: 8 },
+  toggles: { alignItems: 'flex-end' },
+  debugBtn: { padding: 8, backgroundColor: 'rgba(14,17,22,0.6)', borderRadius: 8, marginTop: 6, minWidth: 64, alignItems: 'center' },
   debugText: { color: theme.textDim, fontSize: 12, fontWeight: '600' },
   limit: { color: theme.warning, textAlign: 'center', marginTop: 8, fontWeight: '700' },
   error: { color: theme.danger, marginTop: 8, marginHorizontal: 16, backgroundColor: 'rgba(0,0,0,0.6)', padding: 8, borderRadius: 8 },

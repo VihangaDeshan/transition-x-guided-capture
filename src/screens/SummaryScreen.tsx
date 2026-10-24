@@ -114,6 +114,10 @@ export default function SummaryScreen({ lang, summary, onRecordAgain, onNewScan 
         {metric(t('keyframes'), `${summary.keyframeCount}`)}
         {metric(t('recording'), summary.recordingOk ? t('recordingOk') : t('recordingFailed'))}
         {metric(t('interruptions'), `${summary.interruptions}`)}
+        {summary.coverageFraction !== null && summary.coverageFraction !== undefined
+          ? metric(t('coverageMeasured'), `${Math.round(summary.coverageFraction * 100)}%`)
+          : null}
+        {metric(t('loopClosed'), summary.loopClosed ? t('yes') : t('no'))}
       </View>
 
       <View style={styles.card}>
@@ -122,7 +126,8 @@ export default function SummaryScreen({ lang, summary, onRecordAgain, onNewScan 
           <PoseTrail trail={summary.trail ?? []} position={null} size={220} />
         </View>
         <Text style={styles.small}>
-          {t('coverage')}: {summary.coverageMethod} — {t('coverageNote')}
+          {t('coverage')}: {summary.coverageMethod}
+          {summary.coverageMethod === 'POSE_TRAIL' ? ` — ${t('coverageNote')}` : ''}
         </Text>
       </View>
 

@@ -22,6 +22,8 @@ export default function DebugOverlay({ signal: s, guidance: g }: Props) {
     `sharp ${f(s.sharpness, 2)}  texture ${f(s.textureFraction, 2)}  feat ${s.featureCount}`,
     `spin ${f(s.windowRotationDeg, 0)}° / ${f(s.windowTranslationM, 2)} m`,
     `kf ${s.keyframeCount}  path ${f(s.pathLengthM)} m  base ${f(s.baseline, 2)}  every ${s.sampleInterval}${s.imageSuspended ? ' (img off)' : ''}`,
+    `acc ${f(s.angularAccel, 0)}°/s²  af ${s.afState}  glare ${f(s.specularPercent)}%  depth ${s.distanceToSurface == null ? '—' : f(s.distanceToSurface, 2) + ' m'}`,
+    `voxels ${s.coverageObserved} cov ${s.coverageObserved ? Math.round((100 * s.coverageCovered) / s.coverageObserved) : 0}%  unseen ${f(s.unseenArcDeg, 0)}°  1-angle ${f(s.viewSingleAngleFraction, 2)}  start ${f(s.distanceFromStartM)} m`,
   ];
   return (
     <View style={styles.box} pointerEvents="none" testID="debug-overlay">

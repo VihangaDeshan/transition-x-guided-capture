@@ -19,6 +19,10 @@ declare class GuidedCaptureModule extends NativeModule<GuidedCaptureEvents> {
   discardSession(sessionId: string): Promise<boolean>;
   sharePackage(sessionId: string): Promise<boolean>;
   setDebugSignals(enabled: boolean): void;
+  setCoverageOverlay(enabled: boolean): void;
+  prepareSpeech(): Promise<boolean>;
+  speak(text: string, languageTag: string, fallbackEnglish: string | null): Promise<boolean>;
+  stopSpeaking(): Promise<boolean>;
 }
 
 export default requireNativeModule<GuidedCaptureModule>('GuidedCapture');

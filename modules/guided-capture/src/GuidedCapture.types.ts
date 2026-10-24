@@ -2,13 +2,14 @@
 // TypeScript mirror of the bridge payloads. Field names match the Kotlin maps exactly.
 
 export type RuleId =
-  | 'T1' | 'T2' | 'T3' | 'T4' | 'T5' | 'T6'
-  | 'G1' | 'G2' | 'G3' | 'G4'
+  | 'T1' | 'T2' | 'T3' | 'T4' | 'T5' | 'T6' | 'T7'
+  | 'G1' | 'G2' | 'G3' | 'G4' | 'G5'
   | 'L1' | 'L2' | 'L3' | 'L4' | 'L5'
   | 'S1' | 'S2' | 'S3' | 'S4'
   | 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6';
 
 export type Severity = 'INFO' | 'WARNING' | 'CRITICAL';
+export type Direction = 'LEFT' | 'RIGHT' | 'UP' | 'DOWN' | 'BEHIND';
 export type SessionState = 'IDLE' | 'INITIALIZING' | 'SCANNING' | 'TRACKING_LOST' | 'REVIEWING';
 export type TrackingStatus = 'TRACKING' | 'PAUSED' | 'STOPPED';
 export type TrackingFailure =
@@ -34,6 +35,8 @@ export interface GuidancePayload {
   canStop: boolean;
   escalated: boolean;
   elapsedMs: number;
+  /** Arrow for C1, C2 and C4. */
+  direction: Direction | null;
   coverage: CoveragePayload;
 }
 
@@ -50,6 +53,12 @@ export interface StatusPayload {
   thermalStatus: number;
   position: [number, number];
   trailAppend: [number, number][];
+  coverageMethod: CoveragePayload['method'];
+  /** Share of observed surfaces seen from two or more angles (0..1). */
+  coverageFraction: number;
+  coverageObserved: number;
+  coverageCovered: number;
+  distanceToSurfaceM: number | null;
   maxSessionMs: number;
   warnBeforeEndMs: number;
 }
@@ -76,6 +85,15 @@ export interface SignalPayload {
   pathLengthM: number;
   textureFraction: number;
   sharpness: number;
+  angularAccel: number;
+  afState: number;
+  specularPercent: number;
+  distanceToSurface: number | null;
+  distanceFromStartM: number;
+  coverageObserved: number;
+  coverageCovered: number;
+  unseenArcDeg: number;
+  viewSingleAngleFraction: number;
   sampleInterval: number;
   imageSuspended: boolean;
 }
@@ -92,6 +110,9 @@ export interface SessionSummary {
   warningsByRule: Partial<Record<RuleId, number>>;
   suppressedByRule: Partial<Record<RuleId, number>>;
   coverageMethod: string;
+  coverageFraction: number | null;
+  coverageObserved: number;
+  loopClosed: boolean;
   pathLengthM: number;
   keyframeCount: number;
   maxDistanceFromStartM: number;
