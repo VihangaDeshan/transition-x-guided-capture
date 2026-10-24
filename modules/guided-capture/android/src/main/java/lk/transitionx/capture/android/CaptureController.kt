@@ -5,7 +5,6 @@ package lk.transitionx.capture.android
 
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.opengl.GLES20
@@ -14,7 +13,6 @@ import android.os.StatFs
 import android.util.Log
 import android.view.WindowManager
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import com.google.ar.core.ArCoreApk
 import com.google.ar.core.CameraConfig
 import com.google.ar.core.CameraConfigFilter
@@ -29,8 +27,6 @@ import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.google.ar.core.exceptions.NotYetAvailableException
 import com.google.ar.core.exceptions.SessionPausedException
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.EnumSet
@@ -38,8 +34,6 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
 import java.util.concurrent.locks.ReentrantLock
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 import kotlin.concurrent.withLock
 import lk.transitionx.capture.core.CaptureFrame
 import lk.transitionx.capture.core.CapturePose
@@ -72,6 +66,7 @@ class CaptureController private constructor(private val context: Context) {
     @Volatile private var geometryDirty = true
 
     @Volatile private var capture: ActiveCapture? = null
+    private val exporter = PackageExporter(context) { baseDir() }
     private var chosenCameraConfig: CameraConfig? = null
 
     private class ActiveCapture(
@@ -217,10 +212,15 @@ class CaptureController private constructor(private val context: Context) {
                 .setTargetFps(EnumSet.of(CameraConfig.TargetFps.TARGET_FPS_30))
                 .setFacingDirection(CameraConfig.FacingDirection.BACK)
             val configs = s.getSupportedCameraConfigs(filter)
-            // Highest texture resolution up to 1080p that sustains 30 fps (TDD 5.4).
+            // The ARCore recording stores the CPU image stream, not the display texture: the first
+            // A55 capture was 640x480 although the texture was 1920x1080. Prefer the largest CPU
+            // image up to MAX_CPU_IMAGE_PIXELS (720p), then the largest texture up to 1080p.
             val best = configs
                 .filter { it.textureSize.width * it.textureSize.height <= 1920 * 1080 }
-                .maxByOrNull { it.textureSize.width * it.textureSize.height }
+                .filter { it.imageSize.width * it.imageSize.height <= MAX_CPU_IMAGE_PIXELS }
+                .maxWithOrNull(compareBy<CameraConfig>(
+                    { it.imageSize.width * it.imageSize.height },
+                    { it.textureSize.width * it.textureSize.height }))
             if (best != null) {
                 s.cameraConfig = best
                 chosenCameraConfig = best
@@ -310,6 +310,16 @@ class CaptureController private constructor(private val context: Context) {
         } finally {
             sessionLock.unlock()
         }
+    }
+
+    /**
+     * Measured on the Galaxy A55: 90.8 MB for 83.5 s at 640x480 (about 1.09 MB/s, H.264 plus
+     * IMU tracks). Scaled by CPU image pixels, with 25 % margin.
+     */
+    private fun estimatedRecordingBytesPerSecond(): Long {
+        val size = try { chosenCameraConfig?.imageSize } catch (_: Exception) { null }
+        val pixels = if (size != null) size.width.toLong() * size.height else 640L * 480
+        return (1_090_000L * pixels / (640L * 480) * 5 / 4).coerceAtLeast(500_000L)
     }
 
     private fun displayRotation(): Int = try {
@@ -417,7 +427,8 @@ class CaptureController private constructor(private val context: Context) {
         val thresholds = (config["thresholds"] as? Map<String, Any?>)?.let { Thresholds.fromMap(it) } ?: Thresholds()
         debugSignals = config["debugSignals"] as? Boolean ?: false
         val appVersion = config["appVersion"] as? String ?: "dev"
-        val bytesPerSecond = (config["estimatedBytesPerSecond"] as? Number)?.toLong() ?: 2_500_000L
+        val bytesPerSecond = (config["estimatedBytesPerSecond"] as? Number)?.toLong()?.coerceIn(100_000L, 50_000_000L)
+            ?: estimatedRecordingBytesPerSecond()
 
         // NFR-5: verify free space against the estimate for a maximum-length session.
         val required = bytesPerSecond * (thresholds.maxSessionMs / 1000) + 50L * 1024 * 1024
@@ -428,8 +439,7 @@ class CaptureController private constructor(private val context: Context) {
         }
 
         val id = UUID.randomUUID().toString()
-        val dir = File(File(baseDir(), "sessions"), "scan_$id")
-        if (!dir.mkdirs()) throw CaptureException("ERR_STORAGE", "Could not create ${dir.absolutePath}")
+        val dir = exporter.newSessionDir(id)
         val logger = SessionLogger(dir)
         val pipeline = AnalysisPipeline(
             context, thresholds, logger,
@@ -533,58 +543,14 @@ class CaptureController private constructor(private val context: Context) {
         return result
     }
 
-    /** Background thread. Zips an accepted session into exports/scan_<id>.zip. */
-    fun acceptSession(sessionId: String): Map<String, Any?> {
-        val dir = sessionDir(sessionId)
-        File(dir, "status.json").writeText(JsonLite.write(mapOf(
-            "accepted" to true, "acceptedAt" to isoNow(), "transfer" to "MANUAL")))
-        val exports = File(baseDir(), "exports").apply { mkdirs() }
-        val zip = File(exports, "scan_$sessionId.zip")
-        ZipOutputStream(FileOutputStream(zip)).use { out ->
-            dir.listFiles()?.sortedBy { it.name }?.forEach { f ->
-                if (!f.isFile) return@forEach
-                out.putNextEntry(ZipEntry("scan_$sessionId/${f.name}"))
-                FileInputStream(f).use { it.copyTo(out, 256 * 1024) }
-                out.closeEntry()
-            }
-        }
-        // No upload endpoint is configured (TDD section 16): transfer is manual by design.
-        return mapOf(
-            "sessionId" to sessionId,
-            "packagePath" to dir.absolutePath,
-            "zipPath" to zip.absolutePath,
-            "zipBytes" to zip.length().toDouble(),
-            "transfer" to "MANUAL"
-        )
-    }
+    fun acceptSession(sessionId: String): Map<String, Any?> = exporter.accept(sessionId, isoNow())
 
     fun discardSession(sessionId: String): Boolean {
-        val dir = sessionDir(sessionId)
-        File(File(baseDir(), "exports"), "scan_$sessionId.zip").delete()
-        return dir.deleteRecursively()
+        if (capture?.sessionId == sessionId) throw CaptureException("ERR_BUSY", "This capture is still running")
+        return exporter.discard(sessionId)
     }
 
-    /** Main thread. Offers the zipped package through the Android share sheet. */
-    fun sharePackage(activity: Activity, sessionId: String): Boolean {
-        val zip = File(File(baseDir(), "exports"), "scan_$sessionId.zip")
-        if (!zip.exists()) throw CaptureException("ERR_NOT_FOUND", "Accept the capture before sharing it")
-        val uri = FileProvider.getUriForFile(context, context.packageName + ".guidedcapture.fileprovider", zip)
-        val send = Intent(Intent.ACTION_SEND).apply {
-            type = "application/zip"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, "Guided capture scan_$sessionId")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        activity.startActivity(Intent.createChooser(send, "Send capture package"))
-        return true
-    }
-
-    private fun sessionDir(sessionId: String): File {
-        require(sessionId.matches(Regex("[0-9a-fA-F-]{36}"))) { "bad session id" }
-        val dir = File(File(baseDir(), "sessions"), "scan_$sessionId")
-        if (!dir.isDirectory) throw CaptureException("ERR_NOT_FOUND", "Session $sessionId not found")
-        return dir
-    }
+    fun sharePackage(activity: Activity, sessionId: String): Boolean = exporter.share(activity, sessionId)
 
     private fun isoNow(): String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT)
         .apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date())
@@ -592,6 +558,8 @@ class CaptureController private constructor(private val context: Context) {
     companion object {
         private const val TAG = "GuidedCapture"
         const val VIDEO_FILE = "session.mp4"
+        /** Cap on the recorded CPU image size; 720p until Rysera states its preferred resolution. */
+        const val MAX_CPU_IMAGE_PIXELS = 1280 * 720
 
         @Volatile private var instance: CaptureController? = null
 

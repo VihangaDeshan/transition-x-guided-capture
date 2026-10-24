@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Least privilege: only finished export zips can ever be handed to another app. Raw session
+     folders (video of a home, poses, logs) are not reachable through the FileProvider. -->
 <paths>
-    <external-files-path name="gc_external" path="." />
-    <files-path name="gc_internal" path="." />
+    <external-files-path name="gc_exports" path="exports/" />
+    <files-path name="gc_exports_internal" path="exports/" />
 </paths>
