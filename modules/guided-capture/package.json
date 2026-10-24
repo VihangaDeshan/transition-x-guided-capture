@@ -1,0 +1,8 @@
+{
+  "name": "guided-capture",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Android ARCore native module for Transition X guided capture",
+  "main": "src/index.ts",
+  "license": "Apache-2.0"
+}
