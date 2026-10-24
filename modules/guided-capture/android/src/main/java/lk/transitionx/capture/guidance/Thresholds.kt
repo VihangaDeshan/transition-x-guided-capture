@@ -5,7 +5,7 @@
 package lk.transitionx.capture.guidance
 
 data class Thresholds(
-    val version: String = "1.1-scan1",
+    val version: String = "1.2-phase23",
 
     // G1 turn too fast (deg/s), hysteresis enter/exit
     val angularVelocityEnter: Float = 45f,
@@ -76,7 +76,50 @@ data class Thresholds(
     val maxSessionMs: Long = 600_000,
     val warnBeforeEndMs: Long = 60_000,
     /** Image analysis runs on every n-th frame (doubled on the first thermal warning). */
-    val imageSampleInterval: Int = 4
+    val imageSampleInterval: Int = 4,
+
+    // ---- Phase 2 / 3 (v1.2) ----
+    // G5 move smoothly: change of angular velocity, deg/s^2
+    val angularAccelEnter: Float = 400f,
+    val angularAccelExit: Float = 250f,
+    // L4 clean the lens: soft image while the phone is still, in good light, on a detailed scene
+    val lensSharpnessMax: Float = 1.0f,
+    val lensMinTexture: Float = 0.25f,
+    val lensSustainMs: Long = 5000,
+    // L5 wait for focus: autofocus scanning while the image is soft
+    val focusSustainMs: Long = 1000,
+    // S2 / S3 distance to the surface in view (Depth API; absent without depth)
+    val tooCloseM: Float = 0.5f,
+    val tooCloseExitM: Float = 0.6f,
+    val tooFarM: Float = 4.0f,
+    val tooFarExitM: Float = 3.5f,
+    // S4 mirror / glass (experimental): glare blocks, percent of the image
+    val specularMinPercent: Float = 2f,
+    val specularMaxPercent: Float = 15f,
+    val reflectionSustainMs: Long = 1500,
+    // C1 / C2 / C3 / C4 navigation, shown only after this much scanning
+    val coverageGuidanceAfterMs: Long = 15_000,
+    val unseenArcMinDeg: Float = 60f,
+    val turnMinYawDeg: Float = 45f,
+    val lookUpDownAfterMs: Long = 30_000,
+    val needViewsFraction: Float = 0.7f,
+    val needViewsMinVoxels: Int = 15,
+    val needViewsSustainMs: Long = 3000,
+    val cornerAfterMs: Long = 45_000,
+    val cornerMinVoxels: Int = 150,
+    // C5 return to the start (loop closure)
+    val loopAfterMs: Long = 40_000,
+    val loopMinAwayM: Float = 2.5f,
+    val loopReturnM: Float = 1.0f,
+    // T7 redo a poor stretch
+    val segmentWindowMs: Long = 5000,
+    val segmentBadRatio: Float = 0.6f,
+    // C6 with measured coverage
+    val stopMinCoverage: Float = 0.5f,
+    val stopCoverageMinVoxels: Int = 60,
+    // Coverage model
+    val voxelSizeM: Float = 0.2f,
+    val minParallaxDeg: Float = 15f,
 ) {
     companion object {
         /** Builds a set from a loosely typed map (parsed JSON); unknown keys are ignored. */
@@ -127,7 +170,38 @@ data class Thresholds(
                 trackingLostGraceMs = l("trackingLostGraceMs", d.trackingLostGraceMs),
                 maxSessionMs = l("maxSessionMs", d.maxSessionMs),
                 warnBeforeEndMs = l("warnBeforeEndMs", d.warnBeforeEndMs),
-                imageSampleInterval = i("imageSampleInterval", d.imageSampleInterval)
+                imageSampleInterval = i("imageSampleInterval", d.imageSampleInterval),
+                angularAccelEnter = f("angularAccelEnter", d.angularAccelEnter),
+                angularAccelExit = f("angularAccelExit", d.angularAccelExit),
+                lensSharpnessMax = f("lensSharpnessMax", d.lensSharpnessMax),
+                lensMinTexture = f("lensMinTexture", d.lensMinTexture),
+                lensSustainMs = l("lensSustainMs", d.lensSustainMs),
+                focusSustainMs = l("focusSustainMs", d.focusSustainMs),
+                tooCloseM = f("tooCloseM", d.tooCloseM),
+                tooCloseExitM = f("tooCloseExitM", d.tooCloseExitM),
+                tooFarM = f("tooFarM", d.tooFarM),
+                tooFarExitM = f("tooFarExitM", d.tooFarExitM),
+                specularMinPercent = f("specularMinPercent", d.specularMinPercent),
+                specularMaxPercent = f("specularMaxPercent", d.specularMaxPercent),
+                reflectionSustainMs = l("reflectionSustainMs", d.reflectionSustainMs),
+                coverageGuidanceAfterMs = l("coverageGuidanceAfterMs", d.coverageGuidanceAfterMs),
+                unseenArcMinDeg = f("unseenArcMinDeg", d.unseenArcMinDeg),
+                turnMinYawDeg = f("turnMinYawDeg", d.turnMinYawDeg),
+                lookUpDownAfterMs = l("lookUpDownAfterMs", d.lookUpDownAfterMs),
+                needViewsFraction = f("needViewsFraction", d.needViewsFraction),
+                needViewsMinVoxels = i("needViewsMinVoxels", d.needViewsMinVoxels),
+                needViewsSustainMs = l("needViewsSustainMs", d.needViewsSustainMs),
+                cornerAfterMs = l("cornerAfterMs", d.cornerAfterMs),
+                cornerMinVoxels = i("cornerMinVoxels", d.cornerMinVoxels),
+                loopAfterMs = l("loopAfterMs", d.loopAfterMs),
+                loopMinAwayM = f("loopMinAwayM", d.loopMinAwayM),
+                loopReturnM = f("loopReturnM", d.loopReturnM),
+                segmentWindowMs = l("segmentWindowMs", d.segmentWindowMs),
+                segmentBadRatio = f("segmentBadRatio", d.segmentBadRatio),
+                stopMinCoverage = f("stopMinCoverage", d.stopMinCoverage),
+                stopCoverageMinVoxels = i("stopCoverageMinVoxels", d.stopCoverageMinVoxels),
+                voxelSizeM = f("voxelSizeM", d.voxelSizeM),
+                minParallaxDeg = f("minParallaxDeg", d.minParallaxDeg)
             ))
         }
 
@@ -160,7 +234,21 @@ data class Thresholds(
             imageSampleInterval = t.imageSampleInterval.coerceIn(1, 30),
             imageMaxAgeMs = t.imageMaxAgeMs.coerceIn(100, 10_000),
             keepMovingAfterMs = t.keepMovingAfterMs.coerceIn(500, 60_000),
-            baselineMinM = t.baselineMinM.coerceIn(0.01f, 2f)
+            baselineMinM = t.baselineMinM.coerceIn(0.01f, 2f),
+            angularAccelExit = minOf(t.angularAccelExit, t.angularAccelEnter),
+            tooCloseExitM = maxOf(t.tooCloseExitM, t.tooCloseM),
+            tooFarExitM = minOf(t.tooFarExitM, t.tooFarM),
+            specularMaxPercent = maxOf(t.specularMaxPercent, t.specularMinPercent),
+            lensSustainMs = t.lensSustainMs.coerceIn(0, 60_000),
+            focusSustainMs = t.focusSustainMs.coerceIn(0, 60_000),
+            reflectionSustainMs = t.reflectionSustainMs.coerceIn(0, 60_000),
+            needViewsSustainMs = t.needViewsSustainMs.coerceIn(0, 60_000),
+            needViewsFraction = t.needViewsFraction.coerceIn(0f, 1f),
+            segmentWindowMs = t.segmentWindowMs.coerceIn(1_000, 60_000),
+            segmentBadRatio = t.segmentBadRatio.coerceIn(0.1f, 1f),
+            stopMinCoverage = t.stopMinCoverage.coerceIn(0f, 1f),
+            voxelSizeM = t.voxelSizeM.coerceIn(0.05f, 1f),
+            minParallaxDeg = t.minParallaxDeg.coerceIn(2f, 90f)
         )
     }
 }

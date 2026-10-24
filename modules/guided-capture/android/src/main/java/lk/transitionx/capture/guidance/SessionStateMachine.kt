@@ -13,7 +13,11 @@ object PermittedRules {
     val table: Map<SessionState, Set<GuidanceRuleId>> = mapOf(
         SessionState.IDLE to emptySet(),
         SessionState.INITIALIZING to setOf(T2) + blocking,
-        SessionState.SCANNING to setOf(G4, G1, L1, L3, S1, G2, L2, T6, T3, G3, C6) + blocking,
+        SessionState.SCANNING to setOf(
+            G4, G1, L1, L3, S1, G2, L2, T6, T3, G3, C6,            // Phase 1 (+T3)
+            T7, G5, L4, L5, S2, S3, C1, C2, C3, C5,                // Phase 2
+            S4, C4                                                  // Phase 3
+        ) + blocking,
         SessionState.TRACKING_LOST to setOf(T1) + blocking,
         SessionState.REVIEWING to emptySet()
     )

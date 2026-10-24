@@ -45,7 +45,21 @@ object LogCodec {
         "pathLengthM" to s.pathLengthM,
         "maxDistanceFromStartM" to s.maxDistanceFromStartM,
         "textureFraction" to s.textureFraction,
-        "sharpness" to s.sharpness
+        "sharpness" to s.sharpness,
+        "angularAccel" to s.angularAccel,
+        "afState" to s.afState,
+        "specularPercent" to s.specularPercent,
+        "distanceFromStartM" to s.distanceFromStartM,
+        "coverageMethodCode" to s.coverageMethodCode,
+        "coverageObserved" to s.coverageObserved,
+        "coverageCovered" to s.coverageCovered,
+        "unseenArcDeg" to s.unseenArcDeg,
+        "unseenArcYawDeg" to s.unseenArcYawDeg,
+        "lookedUp" to s.lookedUp,
+        "lookedDown" to s.lookedDown,
+        "viewVoxelCount" to s.viewVoxelCount,
+        "viewSingleAngleFraction" to s.viewSingleAngleFraction,
+        "missingCornerYawDeg" to s.missingCornerYawDeg
     )
 
     fun signalLine(s: SignalFrame): String = JsonLite.write(signalToMap(s))
@@ -77,7 +91,22 @@ object LogCodec {
             pathLengthM = f("pathLengthM"),
             maxDistanceFromStartM = f("maxDistanceFromStartM"),
             textureFraction = (m["textureFraction"] as? Number)?.toFloat() ?: -1f,
-            sharpness = (m["sharpness"] as? Number)?.toFloat() ?: -1f
+            sharpness = (m["sharpness"] as? Number)?.toFloat() ?: -1f,
+            // v1.2 fields. Absent in older logs: unknown must never trigger guidance on replay.
+            angularAccel = f("angularAccel"),
+            afState = (m["afState"] as? Number)?.toInt() ?: -1,
+            specularPercent = f("specularPercent"),
+            distanceFromStartM = (m["distanceFromStartM"] as? Number)?.toFloat() ?: f("maxDistanceFromStartM"),
+            coverageMethodCode = i("coverageMethodCode"),
+            coverageObserved = i("coverageObserved"),
+            coverageCovered = i("coverageCovered"),
+            unseenArcDeg = f("unseenArcDeg"),
+            unseenArcYawDeg = (m["unseenArcYawDeg"] as? Number)?.toFloat(),
+            lookedUp = m["lookedUp"] as? Boolean ?: true,
+            lookedDown = m["lookedDown"] as? Boolean ?: true,
+            viewVoxelCount = i("viewVoxelCount"),
+            viewSingleAngleFraction = f("viewSingleAngleFraction"),
+            missingCornerYawDeg = (m["missingCornerYawDeg"] as? Number)?.toFloat()
         )
     }
 

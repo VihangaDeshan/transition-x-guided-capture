@@ -5,7 +5,9 @@
 // real time for calibration (section 19).
 package lk.transitionx.capture.guidance
 
+import lk.transitionx.capture.core.CoverageMethod
 import lk.transitionx.capture.core.CoverageState
+import lk.transitionx.capture.core.Direction
 import lk.transitionx.capture.core.GuidanceRuleId
 import lk.transitionx.capture.core.GuidanceState
 import lk.transitionx.capture.core.SessionState
@@ -40,6 +42,8 @@ data class EngineSummary(
     val trackingLostCount: Int,
     val trackingLostTotalMs: Long,
     val canStop: Boolean,
+    val loopClosed: Boolean = false,
+    val coverage: CoverageState = CoverageState.POSE_TRAIL_ONLY,
     /** Number of times each rule was shown to the user. */
     val shownByRule: Map<GuidanceRuleId, Int>,
     /** Number of times each rule became active but was not shown. */
@@ -47,9 +51,9 @@ data class EngineSummary(
 )
 
 class GuidanceEngine(private val t: Thresholds = Thresholds()) {
-    private class RuleState(var active: Boolean = false, var consecutive: Int = 0)
+    private class RuleState(var active: Boolean = false, var consecutive: Int = 0, var rawSinceMs: Long? = null)
 
-    private val rules = Rules.phase1(t)
+    private val rules = Rules.all(t)
     private val ruleStates = rules.associate { it.id to RuleState() }
     private val machine = SessionStateMachine(t)
 
@@ -68,12 +72,25 @@ class GuidanceEngine(private val t: Thresholds = Thresholds()) {
     private val shownCount = HashMap<GuidanceRuleId, Int>()
     private val suppressedCount = HashMap<GuidanceRuleId, Int>()
     private var lastState: GuidanceState? = null
+    private var direction: Direction? = null
+    private var coverage = CoverageState.POSE_TRAIL_ONLY
+
+    // Phase 2 engine-level state
+    private var scanningSinceMs: Long? = null
+    private var loopClosed = false
+    private val segment = ArrayDeque<Pair<Long, Boolean>>()
+    private var segmentPendingSinceMs: Long? = null
+    private var segmentArmed = true
+    private var lastT7ShownMs = Long.MIN_VALUE / 2
 
     val sessionState: SessionState get() = machine.state
 
     fun start(nowMs: Long): List<AlertEvent> {
         machine.reset()
-        ruleStates.values.forEach { it.active = false; it.consecutive = 0 }
+        ruleStates.values.forEach { it.active = false; it.consecutive = 0; it.rawSinceMs = null }
+        scanningSinceMs = null; loopClosed = false; segment.clear(); segmentPendingSinceMs = null
+        segmentArmed = true; lastT7ShownMs = Long.MIN_VALUE / 2
+        direction = null; coverage = CoverageState.POSE_TRAIL_ONLY
         showHistory.clear(); shownCount.clear(); suppressedCount.clear()
         shown = null; escalated = false; canStop = false
         startMs = nowMs; lastNowMs = nowMs
@@ -108,6 +125,7 @@ class GuidanceEngine(private val t: Thresholds = Thresholds()) {
         machine.update(s.trackingOk, nowMs)?.let { tr ->
             events += AlertEvent(nowMs, AlertType.STATE, fromState = tr.from, toState = tr.to)
             if (tr.to == SessionState.SCANNING) {
+                if (scanningSinceMs == null) scanningSinceMs = nowMs
                 settleUntilMs = nowMs + t.settleMs
                 lastKeyframeAtMs = nowMs // standing still while tracking was lost is not the user's fault
                 lastKeyframeCount = s.keyframeCount
@@ -120,15 +138,32 @@ class GuidanceEngine(private val t: Thresholds = Thresholds()) {
             lastKeyframeAtMs = nowMs
         }
 
+        coverage = coverageOf(s)
         if (!canStop && state == SessionState.SCANNING) {
+            // Once enough surfaces are measured, completeness also requires real (parallax) coverage.
+            val coverageOk = s.coverageObserved < t.stopCoverageMinVoxels || s.coverageFraction >= t.stopMinCoverage
             canStop = nowMs - startMs >= t.stopMinScanMs &&
                 s.pathLengthM >= t.stopMinPathM &&
                 s.keyframeCount >= t.stopMinKeyframes &&
-                s.maxDistanceFromStartM >= t.stopMinExtentM
+                s.maxDistanceFromStartM >= t.stopMinExtentM &&
+                coverageOk
         }
 
+        // C5: the loop is closed once the user came back near the start after going far enough.
+        if (!loopClosed && s.trackingOk && s.maxDistanceFromStartM >= t.loopMinAwayM && s.distanceFromStartM <= t.loopReturnM) {
+            loopClosed = true
+        }
+
+        // T7: remember a poor stretch (tracking lost, dark or blurred) so the user can redo it.
+        updateSegment(s, nowMs)
+
         val permitted = PermittedRules.of(state)
-        val ctx = RuleContext(nowMs, lastKeyframeAtMs, canStop)
+        val ctx = RuleContext(
+            nowMs, lastKeyframeAtMs, canStop,
+            scanningMs = scanningSinceMs?.let { nowMs - it } ?: 0L,
+            loopClosed = loopClosed,
+            poorSegmentPending = segmentPendingSinceMs != null
+        )
 
         // 1. Hysteresis and debounce for every signal rule permitted in this state.
         val active = ArrayList<GuidanceRuleId>()
@@ -141,8 +176,10 @@ class GuidanceEngine(private val t: Thresholds = Thresholds()) {
             }
             val raw = if (st.active) rule.stay(s, ctx) else rule.enter(s, ctx)
             st.consecutive = if (raw) st.consecutive + 1 else 0
+            st.rawSinceMs = if (raw) (st.rawSinceMs ?: nowMs) else null
+            val sustained = rule.sustainMs <= 0 || nowMs - (st.rawSinceMs ?: nowMs) >= rule.sustainMs
             val wasActive = st.active
-            st.active = if (wasActive) raw else raw && (!rule.debounced || st.consecutive >= t.debounceFrames)
+            st.active = if (wasActive) raw else raw && sustained && (!rule.debounced || st.consecutive >= t.debounceFrames)
             if (st.active) active += rule.id
             if (st.active && !wasActive) newlyActive += rule.id
         }
@@ -177,7 +214,9 @@ class GuidanceEngine(private val t: Thresholds = Thresholds()) {
         if (next != current) {
             dismissShown(nowMs, events, if (next == null) "cleared" else "replaced")
             if (next != null) show(next, nowMs, events)
+            if (next == GuidanceRuleId.T7) { segmentPendingSinceMs = null; lastT7ShownMs = nowMs } // once per poor stretch
         }
+        direction = shown?.let { id -> rules.firstOrNull { it.id == id }?.direction?.invoke(s, ctx) }
 
         // 4. Log rules that became active this frame but are not what the user sees.
         for (id in newlyActive) {
@@ -204,9 +243,42 @@ class GuidanceEngine(private val t: Thresholds = Thresholds()) {
         trackingLostTotalMs = machine.trackingLostTotalMs +
             if (machine.state == SessionState.TRACKING_LOST) nowMs - machine.enteredAtMs else 0,
         canStop = canStop,
+        loopClosed = loopClosed,
+        coverage = coverage,
         shownByRule = shownCount.toMap(),
         suppressedByRule = suppressedCount.toMap()
     )
+
+    private fun coverageOf(s: SignalFrame): CoverageState {
+        val method = when (s.coverageMethodCode) {
+            3 -> CoverageMethod.VOXEL_GRID
+            2 -> CoverageMethod.POINTCLOUD_ANGULAR
+            else -> CoverageMethod.POSE_TRAIL
+        }
+        return CoverageState(method, s.coverageFraction, s.coverageObserved, s.coverageCovered)
+    }
+
+    private fun updateSegment(s: SignalFrame, nowMs: Long) {
+        val fresh = s.imageAgeMs in 0..t.imageMaxAgeMs
+        val bad = !s.trackingOk ||
+            (fresh && s.brightness < t.darkEnter) ||
+            (fresh && s.sharpness >= 0f && s.sharpness < t.sharpnessEnter)
+        segment.addLast(nowMs to bad)
+        while (segment.isNotEmpty() && nowMs - segment.first().first > t.segmentWindowMs) segment.removeFirst()
+        val span = if (segment.size < 2) 0L else segment.last().first - segment.first().first
+        if (span >= t.segmentWindowMs * 8 / 10) {
+            val ratio = segment.count { it.second }.toFloat() / segment.size
+            // Hysteresis: a new poor stretch can only be flagged after the window has recovered,
+            // and T7 is not repeated within 20 s (first real capture: 6 repeats in 83 s otherwise).
+            if (ratio < t.segmentBadRatio / 3) segmentArmed = true
+            if (ratio >= t.segmentBadRatio && segmentArmed && segmentPendingSinceMs == null && nowMs - lastT7ShownMs >= 20_000) {
+                segmentPendingSinceMs = nowMs
+                segmentArmed = false
+            }
+        }
+        // A pending redo request expires if it was never shown.
+        segmentPendingSinceMs?.let { if (nowMs - it > 20_000) segmentPendingSinceMs = null }
+    }
 
     private fun showsInWindow(id: GuidanceRuleId, nowMs: Long): Int {
         val h = showHistory[id] ?: return 0
@@ -239,10 +311,11 @@ class GuidanceEngine(private val t: Thresholds = Thresholds()) {
             ruleId = id,
             severity = id?.severity ?: Severity.INFO,
             sessionState = machine.state,
-            coverage = CoverageState.POSE_TRAIL_ONLY,
             canStop = canStop,
             escalated = escalated,
-            elapsedMs = if (machine.state == SessionState.IDLE) 0 else nowMs - startMs
+            elapsedMs = if (machine.state == SessionState.IDLE) 0 else nowMs - startMs,
+            coverage = coverage,
+            direction = if (id == null) null else direction
         )
     }
 
@@ -250,7 +323,8 @@ class GuidanceEngine(private val t: Thresholds = Thresholds()) {
         val st = buildState(nowMs)
         val prev = lastState
         val changed = prev == null || prev.ruleId != st.ruleId || prev.severity != st.severity ||
-            prev.escalated != st.escalated || prev.sessionState != st.sessionState || prev.canStop != st.canStop
+            prev.escalated != st.escalated || prev.sessionState != st.sessionState || prev.canStop != st.canStop ||
+            prev.direction != st.direction
         lastState = st
         return EngineOutput(st, changed, events)
     }
