@@ -28,6 +28,9 @@ object Rules {
     /** True when the carried-forward image measurements are recent enough to act on. */
     private fun imageFresh(s: SignalFrame, t: Thresholds) = s.imageAgeMs in 0..t.imageMaxAgeMs
 
+    private fun moving(s: SignalFrame, t: Thresholds) =
+        s.angularVelocity > t.blurMotionDegPerSec || s.linearVelocity > t.blurMotionLinearMps
+
     /**
      * Rules evaluated against signals. T1 and T2 are not listed: they are defined by the session
      * state (TRACKING_LOST and INITIALIZING) and injected by the engine.
@@ -58,16 +61,28 @@ object Rules {
                 (imageFresh(s, t) && s.brightness < t.darkExit) ||
                     s.failureReason == TrackingFailure.INSUFFICIENT_LIGHT
             }),
+        // L3 says "move more slowly", so it requires motion: blur while still is a lens/focus
+        // problem (L4/L5), and a plain sharp surface is not blur (contrast-normalised sharpness).
         Rule(GuidanceRuleId.L3, debounced = true,
-            enter = { s, _ -> imageFresh(s, t) && s.blurScore < t.blurEnter },
-            stay = { s, _ -> imageFresh(s, t) && s.blurScore < t.blurExit }),
+            enter = { s, _ ->
+                imageFresh(s, t) && moving(s, t) &&
+                    (if (s.sharpness >= 0f) s.sharpness < t.sharpnessEnter else s.blurScore < t.blurEnter)
+            },
+            stay = { s, _ ->
+                imageFresh(s, t) &&
+                    (if (s.sharpness >= 0f) s.sharpness < t.sharpnessExit else s.blurScore < t.blurExit)
+            }),
+        // S1 uses image texture, not the ARCore point count (0-11 points in a furnished room on the
+        // A55 while tracking never failed). Dark frames also look textureless; L1 covers those.
         Rule(GuidanceRuleId.S1, debounced = true,
             enter = { s, _ ->
-                (s.trackingOk && s.featureCount < t.featureEnter) ||
+                (imageFresh(s, t) && s.textureFraction >= 0f && s.trackingOk &&
+                    s.brightness >= t.darkExit && s.textureFraction < t.textureEnter) ||
                     s.failureReason == TrackingFailure.INSUFFICIENT_FEATURES
             },
             stay = { s, _ ->
-                (s.trackingOk && s.featureCount < t.featureExit) ||
+                (imageFresh(s, t) && s.textureFraction >= 0f && s.trackingOk &&
+                    s.textureFraction < t.textureExit) ||
                     s.failureReason == TrackingFailure.INSUFFICIENT_FEATURES
             }),
         Rule(GuidanceRuleId.G2, debounced = true,

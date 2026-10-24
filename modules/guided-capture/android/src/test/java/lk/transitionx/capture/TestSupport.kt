@@ -34,5 +34,14 @@ fun goodSignal(tMs: Long, keyframes: Int = (tMs / 300).toInt()) = SignalFrame(
     jitterDegPerSec = 1f,
     keyframeCount = keyframes,
     pathLengthM = keyframes * 0.15f,
-    maxDistanceFromStartM = minOf(3f, keyframes * 0.1f)
+    maxDistanceFromStartM = minOf(3f, keyframes * 0.1f),
+    textureFraction = 0.6f,
+    sharpness = 2.0f
 )
+
+/** Motion blur as measured on the A55: low contrast-normalised sharpness while turning. */
+fun SignalFrame.blurred(sharp: Float = 0.5f) =
+    copy(sharpness = sharp, blurScore = 20f, angularVelocity = maxOf(angularVelocity, 25f))
+
+/** A blank wall: almost no textured blocks in a well-lit image. */
+fun SignalFrame.blankWall() = copy(textureFraction = 0.05f, featureCount = 0)

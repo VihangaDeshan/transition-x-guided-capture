@@ -163,11 +163,15 @@ class GuidanceEngine(private val t: Thresholds = Thresholds()) {
 
         // 3. Selection with minimum display time. Tier 0 and state changes pre-empt.
         val current = shown
+        // A message that is still true is kept unless something strictly more urgent appears:
+        // same-tier rules do not take turns (real capture: S1/L3 alternated every 1.5 s).
+        val currentActive = current != null && current in active && !(quiet && current.tier > 0)
         val next: GuidanceRuleId? = when {
             current == null -> best
             current !in permitted -> best
             best == current -> current
             nowMs - shownSinceMs < t.minDisplayMs && (best == null || best.tier > 0) -> current
+            currentActive && (best == null || best.tier >= current.tier) -> current
             else -> best
         }
         if (next != current) {

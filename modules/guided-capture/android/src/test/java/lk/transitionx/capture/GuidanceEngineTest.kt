@@ -50,7 +50,7 @@ class GuidanceEngineTest {
     @Test fun enters_scanning_after_stable_tracking_and_settles_before_warning() {
         val e = GuidanceEngine()
         e.start(0)
-        val blurry = { t: Long -> goodSignal(t).copy(blurScore = 20f) }
+        val blurry = { t: Long -> goodSignal(t).blurred() }
         var t = 0L
         var firstScanningAt = -1L
         var firstL3At = -1L
@@ -70,7 +70,7 @@ class GuidanceEngineTest {
         val e = GuidanceEngine()
         val t = scanning(e)
         val (_, out) = drive(e, t, 500) { tt ->
-            goodSignal(tt).copy(windowRotationDeg = 60f, windowTranslationM = 0.02f, angularVelocity = 80f, blurScore = 20f, featureCount = 5)
+            goodSignal(tt).copy(windowRotationDeg = 60f, windowTranslationM = 0.02f, angularVelocity = 80f).blurred().blankWall()
         }
         assertEquals(GuidanceRuleId.G4, out.state.ruleId)
         assertEquals(Severity.CRITICAL, out.state.severity)
@@ -79,8 +79,8 @@ class GuidanceEngineTest {
     @Test fun debounce_ignores_two_noisy_frames() {
         val e = GuidanceEngine()
         var t = scanning(e)
-        e.evaluate(goodSignal(t).copy(blurScore = 10f), t); t += step
-        e.evaluate(goodSignal(t).copy(blurScore = 10f), t); t += step
+        e.evaluate(goodSignal(t).blurred(), t); t += step
+        e.evaluate(goodSignal(t).blurred(), t); t += step
         val (_, out) = drive(e, t, 2_000) { goodSignal(it) }
         assertNull(out.state.ruleId)
     }
@@ -88,15 +88,15 @@ class GuidanceEngineTest {
     @Test fun hysteresis_keeps_warning_between_enter_and_exit_thresholds() {
         val e = GuidanceEngine()
         var t = scanning(e)
-        var (t2, out) = drive(e, t, 300) { goodSignal(it).copy(blurScore = 50f) }
+        var (t2, out) = drive(e, t, 300) { goodSignal(it).blurred(0.5f) }
         assertEquals(GuidanceRuleId.L3, out.state.ruleId)
-        // 120 is above enter (100) but below exit (150): stays
-        val r = drive(e, t2, 3_000) { goodSignal(it).copy(blurScore = 120f) }
+        // 1.15 is above enter (1.0) but below exit (1.3): stays
+        val r = drive(e, t2, 3_000) { goodSignal(it).blurred(1.15f) }
         assertEquals(GuidanceRuleId.L3, r.second.state.ruleId)
-        // a fresh engine at 120 never warns
+        // a fresh engine at 1.15 never warns
         val fresh = GuidanceEngine()
         t = scanning(fresh)
-        assertNull(drive(fresh, t, 3_000) { goodSignal(it).copy(blurScore = 120f) }.second.state.ruleId)
+        assertNull(drive(fresh, t, 3_000) { goodSignal(it).blurred(1.15f) }.second.state.ruleId)
     }
 
     @Test fun message_stays_at_least_min_display_time() {
@@ -104,7 +104,7 @@ class GuidanceEngineTest {
         var t = scanning(e)
         var shownAt = -1L
         while (shownAt < 0) {
-            val o = e.evaluate(goodSignal(t).copy(featureCount = 3), t)
+            val o = e.evaluate(goodSignal(t).blankWall(), t)
             if (o.state.ruleId == GuidanceRuleId.S1) shownAt = t
             t += step
         }
@@ -176,7 +176,7 @@ class GuidanceEngineTest {
         assertEquals(GuidanceRuleId.C6, o.state.ruleId)
         assertTrue(o.state.canStop)
         // a blur problem outranks the positive message, canStop stays true
-        val (_, o2) = drive(e, t2, 2_000) { kf++; goodSignal(it, keyframes = kf / 10).copy(blurScore = 10f) }
+        val (_, o2) = drive(e, t2, 2_000) { kf++; goodSignal(it, keyframes = kf / 10).blurred() }
         assertEquals(GuidanceRuleId.L3, o2.state.ruleId)
         assertTrue(o2.state.canStop)
     }
@@ -201,7 +201,7 @@ class GuidanceEngineTest {
         val events = ArrayList<lk.transitionx.capture.guidance.AlertEvent>()
         var tt = t
         while (tt < t + 500) {
-            events += e.evaluate(goodSignal(tt).copy(windowRotationDeg = 60f, windowTranslationM = 0f, blurScore = 10f), tt).events
+            events += e.evaluate(goodSignal(tt).copy(windowRotationDeg = 60f, windowTranslationM = 0f).blurred(), tt).events
             tt += step
         }
         assertTrue(events.any { it.type == AlertType.SHOWN && it.ruleId == GuidanceRuleId.G4 })
@@ -241,11 +241,11 @@ class GuidanceEngineTest {
     @Test fun stop_dismisses_and_moves_to_reviewing() {
         val e = GuidanceEngine()
         val t = scanning(e)
-        drive(e, t, 500) { goodSignal(it).copy(blurScore = 5f) }
+        drive(e, t, 500) { goodSignal(it).blurred() }
         val ev = e.stop(t + 600)
         assertTrue(ev.any { it.type == AlertType.DISMISSED && it.ruleId == GuidanceRuleId.L3 })
         assertEquals(SessionState.REVIEWING, e.sessionState)
-        assertNull(e.evaluate(goodSignal(t + 700).copy(blurScore = 5f), t + 700).state.ruleId)
+        assertNull(e.evaluate(goodSignal(t + 700).blurred(), t + 700).state.ruleId)
         assertEquals(1, e.summary(t + 700).shownByRule[GuidanceRuleId.L3])
     }
 }
