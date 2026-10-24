@@ -1,6 +1,6 @@
 # Export package format
 
-`formatVersion: 1.0`. Platform-neutral (TDD 15): poses are carried explicitly, so the package does
+`formatVersion: 1.1`. Platform-neutral (TDD 15): poses are carried explicitly, so the package does
 not depend on reading the ARCore recording.
 
 ```
@@ -13,7 +13,11 @@ scan_<uuid>/
   summary.json    verdict, durations, tracking losses, warnings by rule, suppressed by rule
   manifest.json   formatVersion, sessionId, device, camera intrinsics, session stats, recording status, versions
   status.json     written on accept: {"accepted":true,"acceptedAt":...,"transfer":"MANUAL"}
+  checksums.sha256  written on accept: SHA-256 of every file above (`sha256sum -c checksums.sha256`)
 ```
+
+The video resolution is the ARCore **CPU image** size (`recording.videoWidth/videoHeight`), not
+the display texture. Frames are stored in sensor orientation (`camera.imageOrientation: "sensor"`).
 
 Conventions: ARCore world frame (right-handed, +Y up, metres); `Camera.getPose()` (sensor pose);
 timestamps are `Frame.getTimestamp()` nanoseconds in every stream. Intrinsics are for the CPU image
@@ -23,4 +27,6 @@ On the phone the package lives in `Android/data/lk.transitionx.guidedcapture/fil
 zip in `.../files/exports/`.
 
 ## Changelog
+- **1.1** (2026-10-24) — additive: `checksums.sha256`; manifest `integrity`, `recording.videoWidth/videoHeight`,
+  `camera.imageOrientation`; `quality.jsonl` gains `textureFraction` and `sharpness`. 1.0 parsers keep working.
 - **1.0** (2026-10-24) — first release.

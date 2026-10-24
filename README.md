@@ -31,7 +31,7 @@ Tested target: Samsung Galaxy A55 5G (ARCore supported). Any phone on Google's
 | Decision engine (Layer 3) | `guidance/` (pure Kotlin) | Tiers, state machine, hysteresis, debounce (3), min display (1.5 s), cooldown (3 / 10 s), escalation, settling |
 | Interface (Layer 4) | `src/` (React Native) | One banner at a time, haptics by severity, status line, pose trail, debug overlay |
 | Recording & logs (Layer 5) | `SessionLogger`, `ExportDocs` | `session.mp4` via ARCore Recording API, `poses.jsonl`, `quality.jsonl`, `alerts.jsonl`, `coverage.json`, `manifest.json`, `summary.json` |
-| Transfer | `acceptSession` / `sharePackage` | Zip + Android share sheet (manual by design until Rysera provides an endpoint, TDD 16) |
+| Transfer | `PackageExporter` | Zip with SHA-256 checksums + Android share sheet (manual by design until Rysera provides an endpoint, TDD 16); delete-from-phone after sending |
 
 Phase 1 rules implemented: **T1 T2 T4 T5 G4 G1 L1 L3 S1 G2 L2 T6 G3 C6**, plus **T3** (thermal) for
 the thermal policy in TDD 5.3. Phase 2/3 identifiers are defined (stable IDs, strings) but not evaluated.
@@ -86,7 +86,13 @@ pass/fail labels are available.
 
 ## Status and open items
 
-Thresholds are the TDD starting values and **are not calibrated** (`thresholdsVersion: 1.0-initial`).
+**v1.1** — revised after the first on-device capture (Galaxy A55, Android 16): 30 fps sustained,
+no dropped analysis, tracking never lost; S1/L3 false alarms removed, message churn removed,
+recording resolution raised, integrity checksums and security hardening added. Full write-up:
+[`docs/analysis/2026-10-24-first-device-capture.md`](docs/analysis/2026-10-24-first-device-capture.md).
+Security and privacy controls: [`SECURITY.md`](SECURITY.md).
+
+Thresholds (`1.1-scan1`) are informed by one real session but **are not calibrated**.
 Open questions for Rysera are listed in TDD section 23; the most important is pass/fail labels for
 20–30 test captures. See `docs/DEVICE_TEST.md` for the on-phone test checklist.
 

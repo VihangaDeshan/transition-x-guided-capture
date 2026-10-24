@@ -18,6 +18,8 @@ the TDD fields:
 | `keyframeCount` | Keyframes accepted (≥ `baselineMinM` travelled) | G3, C6 |
 | `pathLengthM` | Sum of keyframe baselines | C6 |
 | `maxDistanceFromStartM` | Spatial extent of the walk | C6 |
+| `textureFraction` (v1.1) | Share of 8×8 blocks with luminance std > 8; -1 if unknown | S1 |
+| `sharpness` (v1.1) | Laplacian variance ÷ (mean block variance + 1); -1 if unknown | L3 |
 
 ## Engine behaviour summary
 
@@ -25,11 +27,16 @@ the TDD fields:
 - **State machine** `IDLE → INITIALIZING → SCANNING ⇄ TRACKING_LOST → REVIEWING`, with the permitted
   rule set per state in one table (`PermittedRules`). SCANNING requires 1 s of stable tracking;
   TRACKING_LOST requires 0.5 s of lost tracking (T6 can show inside that grace window).
+- **No same-tier pre-emption** (v1.1): a message that is still true is kept until a strictly more
+  urgent tier appears.
 - **Hysteresis** via separate enter/stay predicates; **debounce** 3 frames (not for ARCore-reported conditions);
   **minimum display** 1.5 s (tier 0 and state changes pre-empt); **cooldown** 3 shows per 10 s; the
   3rd show is **escalated**; **settling** 1 s after entering SCANNING and 0.5 s after recording start.
 - **C6 / canStop** (pose-trail proxy until angular coverage exists): ≥ 45 s scanning, ≥ 6 m path,
-  ≥ 30 keyframes, ≥ 1.5 m from start. Latched once true.
+  ≥ 30 keyframes, ≥ 1.0 m from start. Latched once true.
+- **S1** uses `textureFraction` (not the ARCore point count) and **L3** uses `sharpness` while the
+  phone is moving — see `docs/analysis/2026-10-24-first-device-capture.md`.
+- Threshold files are validated: inverted hysteresis, negative timings and absurd limits are clamped.
 - Time is a parameter — the engine never reads a clock (NFR-13). Replay uses frame timestamps.
 
 ## Bridge (TDD 12)

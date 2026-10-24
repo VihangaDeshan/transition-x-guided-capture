@@ -23,8 +23,10 @@ the capture screen) to see the raw signals behind every message.
 | Turn very fast | **G1** Turn more slowly (or T6/T1 if tracking breaks) | |
 | Cover most of the lens with a finger / very dark room | **L1** too dark | |
 | Point at a bright window | **L2** too bright | |
-| Shake the phone while walking fast | **L3** blurry | |
-| Point at a blank wall from 30 cm | **S1** point at a corner (or T1 if tracking drops) | |
+| Turn quickly in normal light | **L3** blurry (Debug `sharp` < 1.0) or **G1** | |
+| Hold still facing a plain ceiling | **no L3** (v1.0 wrongly warned here) | |
+| Point at a plain, well-lit wall from 1 m (no furniture in view) | **S1** point at a corner (or T1 if tracking drops). Debug `texture` should be < 0.15 | |
+| Point at a shelf / poster wall | **no S1** (v1.0 wrongly warned here) | |
 | Hold the phone still for 4 s | **G3** Keep moving forward (blue) | |
 | Hand tremor while standing | **G2** Hold steady (may need threshold tuning) | |
 | Cover the camera fully for 2 s | **T1** Tracking lost + a hint line; returns to Tracking after uncovering | |
@@ -38,9 +40,12 @@ the capture screen) to see the raw signals behind every message.
 - [ ] Summary shows verdict, duration, tracking losses, distance, viewpoints, video saved, warnings by rule, trail
 - [ ] "Record again" deletes the capture and returns to the camera
 - [ ] "Use this capture" → package path + size; "Share package" opens the share sheet (send to Drive/email)
-- [ ] The zip contains: `session.mp4 poses.jsonl quality.jsonl alerts.jsonl coverage.json summary.json manifest.json status.json`
+- [ ] The zip contains: `session.mp4 poses.jsonl quality.jsonl alerts.jsonl coverage.json summary.json manifest.json status.json checksums.sha256`
+- [ ] On a computer: `cd scan_<id> && sha256sum -c checksums.sha256` → every line `OK`
+- [ ] `manifest.json` → `recording.videoWidth × videoHeight` (v1.0 was 640×480; v1.1 should be larger if the phone offers it)
+- [ ] After sharing, "Delete from this phone" removes the capture
 - [ ] `session.mp4` plays in a normal video player
-- [ ] `manifest.json` has `formatVersion 1.0`, device model, camera fx/fy/cx/cy, `coverage.method POSE_TRAIL`, `thresholdsVersion`
+- [ ] `manifest.json` has `formatVersion 1.1`, device model, camera fx/fy/cx/cy, `coverage.method POSE_TRAIL`, `thresholdsVersion`
 
 ## E. Robustness (NFR)
 - [ ] Press Home during recording, come back → session continues (T1 then Tracking), summary shows 1 interruption
