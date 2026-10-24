@@ -19,7 +19,21 @@ the TDD fields:
 | `pathLengthM` | Sum of keyframe baselines | C6 |
 | `maxDistanceFromStartM` | Spatial extent of the walk | C6 |
 | `textureFraction` (v1.1) | Share of 8×8 blocks with luminance std > 8; -1 if unknown | S1 |
-| `sharpness` (v1.1) | Laplacian variance ÷ (mean block variance + 1); -1 if unknown | L3 |
+| `sharpness` (v1.1) | Laplacian variance ÷ (mean block variance + 1); -1 if unknown | L3, L4 |
+| `distanceToSurface` (v1.2) | median depth at the view centre; null without depth | S2, S3 |
+| `angularAccel` (v1.2) | change of angular velocity, °/s² | G5 |
+| `afState` (v1.2) | Camera2 CONTROL_AF_STATE; -1 unknown | L5 |
+| `specularPercent` (v1.2) | % of 8×8 blocks with a glare pixel inside a darker block | S4 |
+| `distanceFromStartM` (v1.2) | current distance from the start position | C5 |
+| `coverageMethodCode`, `coverageObserved`, `coverageCovered` (v1.2) | coverage model state | C6, UI |
+| `unseenArcDeg`, `unseenArcYawDeg` (v1.2) | largest never-viewed horizontal arc and signed turn to it | C1 |
+| `lookedUp`, `lookedDown` (v1.2) | pitch beyond ±30° ever seen | C2 |
+| `viewVoxelCount`, `viewSingleAngleFraction` (v1.2) | voxels in the view cone, share seen from one angle | C3 |
+| `missingCornerYawDeg` (v1.2) | signed turn to a footprint corner with no observations | C4 |
+
+`GuidanceState` gains `direction` (LEFT/RIGHT/UP/DOWN/BEHIND) for C1, C2 and C4, and `coverage`
+now carries the measured coverage. New rule IDs: **T7** (redo a poor stretch, tier 3) and **G5**
+(move smoothly, tier 4). The full explanation is in `docs/GUIDE.md`.
 
 ## Engine behaviour summary
 
