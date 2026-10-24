@@ -8,7 +8,7 @@ import lk.transitionx.capture.guidance.EngineSummary
 
 object ExportDocs {
     /** Bump on any change to the package layout or field meaning; record it in docs/EXPORT_FORMAT.md. */
-    const val FORMAT_VERSION = "1.1"
+    const val FORMAT_VERSION = "1.2"
 
     data class DeviceInfo(
         val manufacturer: String,
@@ -42,6 +42,8 @@ object ExportDocs {
         val endReason: String
     )
 
+    data class DepthInfo(val supported: Boolean, val used: Boolean)
+
     data class TrailInfo(
         val pathLengthM: Float,
         val keyframeCount: Int,
@@ -69,7 +71,8 @@ object ExportDocs {
         camera: CameraInfo?,
         coverage: CoverageState,
         appVersion: String,
-        thresholdsVersion: String
+        thresholdsVersion: String,
+        depth: DepthInfo? = null
     ): Map<String, Any?> = linkedMapOf(
         "formatVersion" to FORMAT_VERSION,
         "sessionId" to session.sessionId,
@@ -109,7 +112,11 @@ object ExportDocs {
             "videoWidth" to camera?.imageWidth,
             "videoHeight" to camera?.imageHeight
         ),
-        "coverage" to linkedMapOf("method" to coverage.method.name),
+        "coverage" to linkedMapOf(
+            "method" to coverage.method.name,
+            "surfacesSeenFromTwoPlusAngles" to if (coverage.method.name == "POSE_TRAIL") null else coverage.surfacesSeenFromTwoPlusAngles
+        ),
+        "depth" to depth?.let { linkedMapOf("supported" to it.supported, "used" to it.used) },
         "poseConvention" to linkedMapOf(
             "frame" to "ARCore world, right-handed, Y up, metres",
             "pose" to "camera sensor pose (Camera.getPose), quaternion x,y,z,w",
@@ -126,12 +133,19 @@ object ExportDocs {
         "app" to linkedMapOf("version" to appVersion, "thresholdsVersion" to thresholdsVersion)
     )
 
-    fun coverage(state: CoverageState, trail: TrailInfo): Map<String, Any?> = linkedMapOf(
+    /**
+     * [voxels]: x, y, z (voxel centre, metres), parallax degrees, hits. A voxel is covered when its
+     * parallax is at least the session's minParallaxDeg.
+     */
+    fun coverage(state: CoverageState, trail: TrailInfo, voxels: List<FloatArray> = emptyList()): Map<String, Any?> = linkedMapOf(
         "method" to state.method.name,
         "surfacesSeenFromTwoPlusAngles" to if (state.method.name == "POSE_TRAIL") null else state.surfacesSeenFromTwoPlusAngles,
         "observedVoxelCount" to state.observedVoxelCount,
         "coveredVoxelCount" to state.coveredVoxelCount,
-        "note" to "POSE_TRAIL reports the walked path only; no completion percentage is claimed.",
+        "note" to if (state.method.name == "POSE_TRAIL") "POSE_TRAIL reports the walked path only; no completion percentage is claimed."
+            else "Share of observed 20 cm voxels seen along two directions at least minParallaxDeg apart (parallax), not a direction count.",
+        "voxelFields" to listOf("x", "y", "z", "parallaxDeg", "hits"),
+        "voxels" to voxels.map { v -> listOf(v[0], v[1], v[2], v[3], v[4]) },
         "trail" to linkedMapOf(
             "pathLengthM" to trail.pathLengthM,
             "keyframeCount" to trail.keyframeCount,
@@ -151,6 +165,9 @@ object ExportDocs {
             "warningsByRule" to summary.shownByRule.entries.sortedBy { it.key.ordinal }.associate { it.key.name to it.value },
             "suppressedByRule" to summary.suppressedByRule.entries.sortedBy { it.key.ordinal }.associate { it.key.name to it.value },
             "coverageMethod" to coverage.method.name,
+            "coverageFraction" to if (coverage.method.name == "POSE_TRAIL") null else coverage.surfacesSeenFromTwoPlusAngles,
+            "coverageObserved" to coverage.observedVoxelCount,
+            "loopClosed" to summary.loopClosed,
             "pathLengthM" to trail.pathLengthM,
             "keyframeCount" to trail.keyframeCount,
             "maxDistanceFromStartM" to trail.maxDistanceFromStartM,

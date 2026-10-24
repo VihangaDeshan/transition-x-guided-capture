@@ -37,7 +37,6 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import lk.transitionx.capture.core.CaptureFrame
 import lk.transitionx.capture.core.CapturePose
-import lk.transitionx.capture.core.CoverageState
 import lk.transitionx.capture.core.TrackingFailure
 import lk.transitionx.capture.core.TrackingStatus
 import lk.transitionx.capture.export.ExportDocs
@@ -58,8 +57,16 @@ class CaptureController private constructor(private val context: Context) {
     private var view: GuidedCaptureView? = null
     private var hostPaused = false
 
+    /** "Erase the stripes" overlay on/off (JS toggle). */
+    @Volatile var showCoverageOverlay: Boolean = true
+    private var depthSupported = false
+
     // GL thread state
     private val background = BackgroundRenderer()
+    private val overlay = CoverageOverlayRenderer()
+    private val sampler = FrameSampler()
+    private val viewMatrix = FloatArray(16)
+    private val projectionMatrix = FloatArray(16)
     private var boundSession: Session? = null
     private var viewportWidth = 0
     private var viewportHeight = 0
@@ -85,6 +92,7 @@ class CaptureController private constructor(private val context: Context) {
         var interruptions = 0
         var camera: ExportDocs.CameraInfo? = null
         @Volatile var stopping = false
+        @Volatile var depthUsed = false
     }
 
     private fun emit(name: String, body: Map<String, Any?>) {
@@ -236,7 +244,10 @@ class CaptureController private constructor(private val context: Context) {
             updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
             planeFindingMode = Config.PlaneFindingMode.DISABLED
             lightEstimationMode = Config.LightEstimationMode.DISABLED
-            depthMode = Config.DepthMode.DISABLED
+            // Depth (S2/S3 distance and VOXEL_GRID coverage) only where the phone supports it;
+            // without it those rules stay silent and coverage falls back to ARCore points.
+            depthSupported = try { s.isDepthModeSupported(Config.DepthMode.AUTOMATIC) } catch (_: Exception) { false }
+            depthMode = if (depthSupported) Config.DepthMode.AUTOMATIC else Config.DepthMode.DISABLED
         }
         s.configure(config)
         geometryDirty = true
@@ -269,6 +280,7 @@ class CaptureController private constructor(private val context: Context) {
     fun onSurfaceCreated() {
         GLES20.glClearColor(0f, 0f, 0f, 1f)
         background.createOnGlThread()
+        overlay.createOnGlThread()
         boundSession = null
     }
 
@@ -304,7 +316,12 @@ class CaptureController private constructor(private val context: Context) {
                 return
             }
             background.draw(frame)
-            capture?.let { if (!it.stopping) processFrame(it, frame) }
+            capture?.let { cap ->
+                if (!cap.stopping) {
+                    processFrame(cap, frame)
+                    drawOverlay(cap, frame)
+                }
+            }
         } catch (t: Throwable) {
             Log.e(TAG, "frame failed", t)
         } finally {
@@ -320,6 +337,17 @@ class CaptureController private constructor(private val context: Context) {
         val size = try { chosenCameraConfig?.imageSize } catch (_: Exception) { null }
         val pixels = if (size != null) size.width.toLong() * size.height else 640L * 480
         return (1_090_000L * pixels / (640L * 480) * 5 / 4).coerceAtLeast(500_000L)
+    }
+
+    private fun drawOverlay(cap: ActiveCapture, frame: Frame) {
+        if (!showCoverageOverlay) return
+        val camera = frame.camera
+        if (camera.trackingState != TrackingState.TRACKING) return
+        val pts = cap.pipeline.overlayPoints.get()
+        if (pts.isEmpty()) return
+        camera.getViewMatrix(viewMatrix, 0)
+        camera.getProjectionMatrix(projectionMatrix, 0, 0.1f, 30f)
+        overlay.draw(viewMatrix, projectionMatrix, pts, viewportHeight, cap.thresholds.voxelSizeM)
     }
 
     private fun displayRotation(): Int = try {
@@ -387,8 +415,22 @@ class CaptureController private constructor(private val context: Context) {
             if (luma == null) p.lumaBusy.set(false)
         }
 
+        // Depth samples and confident ARCore points feed the coverage model on sampled frames.
+        var points: FloatArray? = null
+        var fromDepth = false
+        var centreDepth: Float? = null
+        if (status == TrackingStatus.TRACKING && cap.frameIndex % p.sampleInterval == 0L) {
+            val sample = sampler.sample(frame, depthSupported)
+            points = sample.points
+            fromDepth = sample.fromDepth
+            centreDepth = sample.centerDepthM
+            if (fromDepth) cap.depthUsed = true
+        }
+        val af = sampler.afState(frame)
+
         cap.logger.pose(ts, pose, status, failure)
-        p.offer(CaptureFrame(ts, pose, status, failure, luma, w, h, stride, null, featureCount))
+        p.offer(CaptureFrame(ts, pose, status, failure, luma, w, h, stride, points, featureCount,
+            centerDepthM = centreDepth, afState = af, pointsFromDepth = fromDepth))
     }
 
     private fun mapFailure(r: TrackingFailureReason): TrackingFailure = when (r) {
@@ -522,15 +564,16 @@ class CaptureController private constructor(private val context: Context) {
             maxDistanceFromStartM = last?.maxDistanceFromStartM ?: 0f,
             points = fin.trail
         )
-        val coverage = CoverageState.POSE_TRAIL_ONLY
+        val coverage = fin.coverage
         val device = ExportDocs.DeviceInfo(Build.MANUFACTURER, Build.MODEL, Build.VERSION.RELEASE ?: "",
             Build.VERSION.SDK_INT, arcoreApkVersion())
         val summary = ExportDocs.summary(fin.summary, sessionInfo, trail, coverage)
         try {
-            File(cap.dir, "coverage.json").writeText(JsonLite.write(ExportDocs.coverage(coverage, trail)))
+            File(cap.dir, "coverage.json").writeText(JsonLite.write(ExportDocs.coverage(coverage, trail, fin.voxels)))
             File(cap.dir, "summary.json").writeText(JsonLite.write(summary))
             File(cap.dir, "manifest.json").writeText(JsonLite.write(
-                ExportDocs.manifest(sessionInfo, device, cap.camera, coverage, cap.appVersion, cap.thresholds.version)))
+                ExportDocs.manifest(sessionInfo, device, cap.camera, coverage, cap.appVersion, cap.thresholds.version,
+                    depth = ExportDocs.DepthInfo(supported = depthSupported, used = cap.depthUsed))))
         } catch (e: Exception) {
             Log.e(TAG, "writing package documents failed", e)
         }

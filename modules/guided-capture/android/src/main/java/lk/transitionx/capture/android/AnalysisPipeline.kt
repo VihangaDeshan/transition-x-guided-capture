@@ -14,12 +14,14 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import lk.transitionx.capture.core.CaptureFrame
+import lk.transitionx.capture.core.CoverageState
 import lk.transitionx.capture.core.GuidanceState
 import lk.transitionx.capture.core.SignalFrame
 import lk.transitionx.capture.guidance.EngineSummary
 import lk.transitionx.capture.guidance.GuidanceEngine
 import lk.transitionx.capture.guidance.Thresholds
 import lk.transitionx.capture.replay.LogCodec
+import lk.transitionx.capture.signals.CoverageConfig
 import lk.transitionx.capture.signals.MotionConfig
 import lk.transitionx.capture.signals.SignalAnalyzer
 
@@ -40,8 +42,13 @@ class AnalysisPipeline(
         MotionConfig(
             spinWindowNs = thresholds.spinWindowMs * 1_000_000L,
             keyframeBaselineM = thresholds.baselineMinM
-        )
+        ),
+        CoverageConfig(voxelSizeM = thresholds.voxelSizeM, minParallaxDeg = thresholds.minParallaxDeg)
     )
+
+    /** Voxel centres seen from one angle only, for the GL overlay (published ~2 Hz). */
+    val overlayPoints = AtomicReference(FloatArray(0))
+    private var lastOverlayMs = 0L
     private val engine = GuidanceEngine(thresholds)
 
     /** Set by the GL thread when it has written the shared luma buffer; cleared after analysis. */
@@ -141,6 +148,10 @@ class AnalysisPipeline(
         logger.alerts(out.events)
 
         if (result.motion.newKeyframe) trail += floatArrayOf(f.pose.tx, f.pose.tz)
+        if (f.trackingStatus == lk.transitionx.capture.core.TrackingStatus.TRACKING && nowMs - lastOverlayMs >= 500) {
+            lastOverlayMs = nowMs
+            overlayPoints.set(analyzer.coverage.singleAngleCentres(f.pose, MAX_OVERLAY_POINTS))
+        }
 
         if (out.changed) emit("guidanceChanged", guidanceMap(out.state))
         if (nowMs - lastStatusMs >= 250) {
@@ -184,6 +195,11 @@ class AnalysisPipeline(
             "thermalStatus" to thermalStatus,
             "position" to listOf(f.pose.tx.toDouble(), f.pose.tz.toDouble()),
             "trailAppend" to newPoints,
+            "coverageMethod" to st.coverage.method.name,
+            "coverageFraction" to st.coverage.surfacesSeenFromTwoPlusAngles.toDouble(),
+            "coverageObserved" to st.coverage.observedVoxelCount,
+            "coverageCovered" to st.coverage.coveredVoxelCount,
+            "distanceToSurfaceM" to s.distanceToSurface?.toDouble(),
             "maxSessionMs" to thresholds.maxSessionMs.toDouble(),
             "warnBeforeEndMs" to thresholds.warnBeforeEndMs.toDouble()
         )
@@ -194,7 +210,9 @@ class AnalysisPipeline(
         val lastState: GuidanceState?,
         val trail: List<FloatArray>,
         val lastSignal: SignalFrame?,
-        val startMs: Long
+        val startMs: Long,
+        val coverage: CoverageState = CoverageState.POSE_TRAIL_ONLY,
+        val voxels: List<FloatArray> = emptyList()
     )
 
     /** Stops the engine on the analysis thread after pending work, and shuts the thread down. */
@@ -204,7 +222,10 @@ class AnalysisPipeline(
             pending.set(null)
             val now = lastSignal?.let { it.timestampNs / 1_000_000L } ?: startMs
             logger.alerts(engine.stop(now))
-            Finish(engine.summary(now), lastState, ArrayList(trail), lastSignal, startMs)
+            val method = analyzer.coverageMethod
+            val cov = analyzer.coverage
+            val coverage = CoverageState(method, if (cov.observed == 0) 0f else cov.covered.toFloat() / cov.observed, cov.observed, cov.covered)
+            Finish(engine.summary(now), lastState, ArrayList(trail), lastSignal, startMs, coverage, cov.exportVoxels())
         })
         val result = try {
             future.get(5, TimeUnit.SECONDS)
@@ -220,6 +241,7 @@ class AnalysisPipeline(
 
     companion object {
         private const val TAG = "GuidedCapturePipeline"
+        private const val MAX_OVERLAY_POINTS = 1500
 
         fun guidanceMap(st: GuidanceState): Map<String, Any?> = mapOf(
             "ruleId" to st.ruleId?.name,
@@ -229,6 +251,7 @@ class AnalysisPipeline(
             "canStop" to st.canStop,
             "escalated" to st.escalated,
             "elapsedMs" to st.elapsedMs.toDouble(),
+            "direction" to st.direction?.name,
             "coverage" to mapOf(
                 "method" to st.coverage.method.name,
                 "surfacesSeenFromTwoPlusAngles" to st.coverage.surfacesSeenFromTwoPlusAngles.toDouble(),
