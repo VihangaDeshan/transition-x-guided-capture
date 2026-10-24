@@ -10,7 +10,19 @@ data class ImageStats(
     /** Percentage (0..100) of pixels above [ImageMetrics.CLIP_HIGH]. */
     val clippedHigh: Float,
     /** Percentage (0..100) of pixels below [ImageMetrics.CLIP_LOW]. */
-    val clippedLow: Float
+    val clippedLow: Float,
+    /**
+     * Fraction (0..1) of 8x8 blocks whose luminance standard deviation exceeds
+     * [ImageMetrics.TEXTURE_BLOCK_STD]. Low on blank walls and ceilings; independent of blur at this
+     * scale. Replaces the ARCore point count for S1, which was 0-11 in a furnished room on the A55.
+     */
+    val textureFraction: Float = 0f,
+    /**
+     * Laplacian variance divided by mean 8x8 block variance (+1). Contrast-normalised, so a plain
+     * but sharp surface is not mistaken for blur, and portable across camera gains. Real capture:
+     * median 0.67 while turning > 30 deg/s, 1.93 while still.
+     */
+    val sharpness: Float = 0f
 )
 
 object ImageMetrics {
@@ -18,6 +30,8 @@ object ImageMetrics {
     const val TARGET_H = 120
     const val CLIP_HIGH = 250
     const val CLIP_LOW = 5
+    const val BLOCK = 8
+    const val TEXTURE_BLOCK_STD = 8f
 
     /**
      * Box-average downsample of a luminance plane to [TARGET_W] x [TARGET_H].
@@ -82,12 +96,47 @@ object ImageMetrics {
             if (v > CLIP_HIGH) hi++
             if (v < CLIP_LOW) lo++
         }
+        val blur = laplacianVariance(img, w, h)
+        val (texture, meanBlockVar) = blockContrast(img, w, h)
         return ImageStats(
-            blurScore = laplacianVariance(img, w, h),
+            blurScore = blur,
             brightness = sum.toFloat() / total,
             clippedHigh = hi * 100f / total,
-            clippedLow = lo * 100f / total
+            clippedLow = lo * 100f / total,
+            textureFraction = texture,
+            sharpness = blur / (meanBlockVar + 1f)
         )
+    }
+
+    /** (fraction of textured blocks, mean block variance) over non-overlapping BLOCK x BLOCK tiles. */
+    fun blockContrast(img: ByteArray, w: Int, h: Int): Pair<Float, Float> {
+        val bw = w / BLOCK
+        val bh = h / BLOCK
+        if (bw == 0 || bh == 0) return 0f to 0f
+        val thresholdVar = TEXTURE_BLOCK_STD * TEXTURE_BLOCK_STD
+        val n = BLOCK * BLOCK
+        var textured = 0
+        var varSum = 0.0
+        for (by in 0 until bh) {
+            for (bx in 0 until bw) {
+                var s = 0
+                var sq = 0L
+                for (y in by * BLOCK until (by + 1) * BLOCK) {
+                    val r = y * w
+                    for (x in bx * BLOCK until (bx + 1) * BLOCK) {
+                        val v = img[r + x].toInt() and 0xFF
+                        s += v
+                        sq += (v * v).toLong()
+                    }
+                }
+                val mean = s.toDouble() / n
+                val variance = (sq.toDouble() / n - mean * mean).coerceAtLeast(0.0)
+                varSum += variance
+                if (variance > thresholdVar) textured++
+            }
+        }
+        val blocks = bw * bh
+        return (textured.toFloat() / blocks) to (varSum / blocks).toFloat()
     }
 
     /** Full measurement: downsample, then blur, brightness and clipping. */

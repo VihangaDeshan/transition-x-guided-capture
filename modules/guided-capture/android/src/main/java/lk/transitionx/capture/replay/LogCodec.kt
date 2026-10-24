@@ -43,7 +43,9 @@ object LogCodec {
         "jitterDegPerSec" to s.jitterDegPerSec,
         "keyframeCount" to s.keyframeCount,
         "pathLengthM" to s.pathLengthM,
-        "maxDistanceFromStartM" to s.maxDistanceFromStartM
+        "maxDistanceFromStartM" to s.maxDistanceFromStartM,
+        "textureFraction" to s.textureFraction,
+        "sharpness" to s.sharpness
     )
 
     fun signalLine(s: SignalFrame): String = JsonLite.write(signalToMap(s))
@@ -73,7 +75,9 @@ object LogCodec {
             jitterDegPerSec = f("jitterDegPerSec"),
             keyframeCount = i("keyframeCount"),
             pathLengthM = f("pathLengthM"),
-            maxDistanceFromStartM = f("maxDistanceFromStartM")
+            maxDistanceFromStartM = f("maxDistanceFromStartM"),
+            textureFraction = (m["textureFraction"] as? Number)?.toFloat() ?: -1f,
+            sharpness = (m["sharpness"] as? Number)?.toFloat() ?: -1f
         )
     }
 

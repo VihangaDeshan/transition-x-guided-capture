@@ -94,7 +94,11 @@ data class SignalFrame(
     val jitterDegPerSec: Float = 0f,
     val keyframeCount: Int = 0,
     val pathLengthM: Float = 0f,
-    val maxDistanceFromStartM: Float = 0f
+    val maxDistanceFromStartM: Float = 0f,
+    /** Share of textured 8x8 blocks, 0..1; -1 when unknown (logs written before v1.1). */
+    val textureFraction: Float = -1f,
+    /** Contrast-normalised sharpness; -1 when unknown (logs written before v1.1). */
+    val sharpness: Float = -1f
 )
 
 enum class Severity { INFO, WARNING, CRITICAL }

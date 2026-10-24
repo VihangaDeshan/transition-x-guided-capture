@@ -51,7 +51,9 @@ class SignalAnalyzer(motionConfig: MotionConfig = MotionConfig()) {
             jitterDegPerSec = m.jitterDegPerSec,
             keyframeCount = m.keyframeCount,
             pathLengthM = m.pathLengthM,
-            maxDistanceFromStartM = m.maxDistanceFromStartM
+            maxDistanceFromStartM = m.maxDistanceFromStartM,
+            textureFraction = img?.textureFraction ?: -1f,
+            sharpness = img?.sharpness ?: -1f
         )
         return Result(signal, m, analysed)
     }
