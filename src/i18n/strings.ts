@@ -160,6 +160,13 @@ const ui = {
     error: 'Error',
     endMax: 'Maximum session length reached — the scan was finished automatically.',
     interruptions: 'Interruptions',
+    integrityNote: 'Includes checksums.sha256 so the receiver can verify every file.',
+    deleteLocal: 'Delete from this phone',
+    deleteTitle: 'Delete this capture?',
+    deleteBody: 'The video and logs will be removed from the phone. Only do this after the package has been sent.',
+    deleteConfirm: 'Delete',
+    cancel: 'Cancel',
+    deletedNote: 'Deleted from this phone.',
   },
   si: {
     appTitle: 'Guided Capture',
@@ -218,6 +225,13 @@ const ui = {
     error: 'දෝෂයක්',
     endMax: 'උපරිම කාලය ඉවරයි — scan එක ස්වයංක්‍රීයව ඉවර කළා.',
     interruptions: 'බාධා',
+    integrityNote: 'ලැබෙන කෙනාට හැම file එකක්ම තහවුරු කරන්න checksums.sha256 ඇතුළත් කරලා තියෙනවා.',
+    deleteLocal: 'මේ phone එකෙන් මකන්න',
+    deleteTitle: 'මේ capture එක මකන්නද?',
+    deleteBody: 'video එක සහ logs phone එකෙන් අයින් වෙනවා. package එක යැව්වට පස්සේ විතරක් මේක කරන්න.',
+    deleteConfirm: 'මකන්න',
+    cancel: 'අවලංගු කරන්න',
+    deletedNote: 'මේ phone එකෙන් මැකුවා.',
   },
 };
 

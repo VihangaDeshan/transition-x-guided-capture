@@ -2,7 +2,7 @@
 // FR-11/12/13/14: summary, then accept (package + manual transfer) or record again while the user
 // is still standing in the room.
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import GuidedCapture, { type AcceptResult, type SessionSummary } from '../../modules/guided-capture';
 import Button from '../components/Button';
@@ -21,7 +21,8 @@ interface Props {
 
 export default function SummaryScreen({ lang, summary, onRecordAgain, onNewScan }: Props) {
   const t = (k: Parameters<typeof uiText>[1]) => uiText(lang, k) as string;
-  const [busy, setBusy] = useState<'accept' | 'again' | 'share' | null>(null);
+  const [busy, setBusy] = useState<'accept' | 'again' | 'share' | 'delete' | null>(null);
+  const [deleted, setDeleted] = useState(false);
   const [exported, setExported] = useState<AcceptResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +65,28 @@ export default function SummaryScreen({ lang, summary, onRecordAgain, onNewScan 
     } finally {
       setBusy(null);
     }
+  };
+
+  // Privacy: the package is a video of someone's home. Once it has been sent, offer to remove it.
+  const deleteLocal = () => {
+    Alert.alert(t('deleteTitle'), t('deleteBody'), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('deleteConfirm'),
+        style: 'destructive',
+        onPress: async () => {
+          setBusy('delete');
+          try {
+            await GuidedCapture.discardSession(summary.sessionId);
+            setDeleted(true);
+          } catch (e) {
+            setError(String((e as Error)?.message ?? e));
+          } finally {
+            setBusy(null);
+          }
+        },
+      },
+    ]);
   };
 
   const metric = (label: string, value: string) => (
@@ -124,10 +147,18 @@ export default function SummaryScreen({ lang, summary, onRecordAgain, onNewScan 
         <View style={[styles.card, { borderColor: theme.good }]}>
           <Text style={styles.section}>{t('exportedTitle')}</Text>
           <Text style={styles.small}>{t('exportedBody')}</Text>
-          <Text style={styles.path} selectable>
-            {t('savedAt')}: {exported.zipPath} ({formatBytes(exported.zipBytes)})
-          </Text>
-          <Button title={t('share')} onPress={share} busy={busy === 'share'} style={{ marginTop: 12 }} />
+          {deleted ? (
+            <Text style={styles.small}>{t('deletedNote')}</Text>
+          ) : (
+            <>
+              <Text style={styles.path} selectable>
+                {t('savedAt')}: {exported.zipPath} ({formatBytes(exported.zipBytes)})
+              </Text>
+              <Text style={styles.small}>{t('integrityNote')}</Text>
+              <Button title={t('share')} onPress={share} busy={busy === 'share'} style={{ marginTop: 12 }} testID="share" />
+              <Button title={t('deleteLocal')} kind="secondary" onPress={deleteLocal} busy={busy === 'delete'} style={{ marginTop: 10 }} testID="delete-local" />
+            </>
+          )}
           <Button title={t('newScan')} kind="secondary" onPress={onNewScan} style={{ marginTop: 10 }} />
         </View>
       ) : (

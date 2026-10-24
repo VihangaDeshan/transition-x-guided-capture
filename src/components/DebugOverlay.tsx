@@ -19,7 +19,8 @@ export default function DebugOverlay({ signal: s, guidance: g }: Props) {
     `track ${s.trackingOk ? 'ok' : 'LOST'} ${s.failureReason}  thermal ${s.thermalStatus}`,
     `blur ${f(s.blurScore, 0)}  bright ${f(s.brightness, 0)}  clipHi ${f(s.clippedHigh)}%  img ${s.imageAgeMs}ms`,
     `ang ${f(s.angularVelocity)}°/s  lin ${f(s.linearVelocity, 2)} m/s  jit ${f(s.jitterDegPerSec)}`,
-    `spin ${f(s.windowRotationDeg, 0)}° / ${f(s.windowTranslationM, 2)} m  feat ${s.featureCount}`,
+    `sharp ${f(s.sharpness, 2)}  texture ${f(s.textureFraction, 2)}  feat ${s.featureCount}`,
+    `spin ${f(s.windowRotationDeg, 0)}° / ${f(s.windowTranslationM, 2)} m`,
     `kf ${s.keyframeCount}  path ${f(s.pathLengthM)} m  base ${f(s.baseline, 2)}  every ${s.sampleInterval}${s.imageSuspended ? ' (img off)' : ''}`,
   ];
   return (

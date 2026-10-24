@@ -74,6 +74,8 @@ export interface SignalPayload {
   jitterDegPerSec: number;
   keyframeCount: number;
   pathLengthM: number;
+  textureFraction: number;
+  sharpness: number;
   sampleInterval: number;
   imageSuspended: boolean;
 }
@@ -122,6 +124,8 @@ export interface AcceptResult {
   packagePath: string;
   zipPath: string;
   zipBytes: number;
+  /** Number of files in the zip, including checksums.sha256. */
+  files: number;
   transfer: 'MANUAL' | 'QUEUED';
 }
 
@@ -134,6 +138,7 @@ export interface StartConfig {
   thresholds: Record<string, number | string>;
   appVersion: string;
   debugSignals?: boolean;
+  /** Override for the free-space check; by default native code estimates it from the camera config. */
   estimatedBytesPerSecond?: number;
 }
 

@@ -9,7 +9,7 @@ import DebugOverlay from '../components/DebugOverlay';
 import GuidanceBanner from '../components/GuidanceBanner';
 import PoseTrail from '../components/PoseTrail';
 import StatusLine from '../components/StatusLine';
-import { APP_VERSION, ESTIMATED_BYTES_PER_SECOND, THRESHOLDS } from '../config';
+import { APP_VERSION, THRESHOLDS } from '../config';
 import { hapticPattern, theme } from '../guidance/presentation';
 import { uiText, type Lang } from '../i18n/strings';
 import { captureReducer, initialCaptureState, nearSessionLimit } from '../state/captureState';
@@ -75,7 +75,6 @@ export default function CaptureScreen({ lang, onCompleted, onExit }: Props) {
         thresholds: THRESHOLDS,
         appVersion: APP_VERSION,
         debugSignals: debug,
-        estimatedBytesPerSecond: ESTIMATED_BYTES_PER_SECOND,
       });
       dispatch({ type: 'started' });
     } catch (e) {
