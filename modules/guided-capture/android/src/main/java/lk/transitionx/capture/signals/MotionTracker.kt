@@ -28,7 +28,11 @@ data class MotionStats(
     val pathLengthM: Float,
     val maxDistanceFromStartM: Float,
     /** True on the update that accepted a new keyframe (used to extend the pose trail). */
-    val newKeyframe: Boolean
+    val newKeyframe: Boolean,
+    /** |change of angular velocity| over the velocity window, deg/s^2 (G5). */
+    val angularAccel: Float = 0f,
+    /** Distance from the start position now, metres (C5). */
+    val distanceFromStartM: Float = 0f
 ) {
     companion object {
         val ZERO = MotionStats(0f, 0f, 0f, 0f, 0f, 0f, 0, 0f, 0f, false)
@@ -44,6 +48,7 @@ class MotionTracker(private val config: MotionConfig = MotionConfig()) {
     private data class Sample(val tNs: Long, val pose: CapturePose)
 
     private val history = ArrayDeque<Sample>()
+    private val velocityHistory = ArrayDeque<Pair<Long, Float>>()
     private var startPose: CapturePose? = null
     private var keyframePose: CapturePose? = null
     private var keyframeCount = 0
@@ -53,6 +58,7 @@ class MotionTracker(private val config: MotionConfig = MotionConfig()) {
 
     fun reset() {
         history.clear()
+        velocityHistory.clear()
         startPose = null
         keyframePose = null
         keyframeCount = 0
@@ -64,8 +70,9 @@ class MotionTracker(private val config: MotionConfig = MotionConfig()) {
     fun update(tNs: Long, pose: CapturePose, trackingOk: Boolean): MotionStats {
         if (!trackingOk) {
             history.clear()
+            velocityHistory.clear()
             last = last.copy(angularVelocity = 0f, linearVelocity = 0f, windowRotationDeg = 0f,
-                windowTranslationM = 0f, jitterDegPerSec = 0f, newKeyframe = false)
+                windowTranslationM = 0f, jitterDegPerSec = 0f, newKeyframe = false, angularAccel = 0f)
             return last
         }
         if (history.isNotEmpty() && tNs <= history.last().tNs) return last // out-of-order frame
@@ -74,7 +81,8 @@ class MotionTracker(private val config: MotionConfig = MotionConfig()) {
         while (history.size > 2 && tNs - history.first().tNs > keep) history.removeFirst()
 
         val start = startPose ?: pose.also { startPose = it }
-        maxDistFromStart = maxOf(maxDistFromStart, pose.translationDistanceTo(start))
+        val distFromStart = pose.translationDistanceTo(start)
+        maxDistFromStart = maxOf(maxDistFromStart, distFromStart)
 
         val kf = keyframePose ?: pose.also { keyframePose = it }
         var baseline = pose.translationDistanceTo(kf)
@@ -95,6 +103,16 @@ class MotionTracker(private val config: MotionConfig = MotionConfig()) {
         if (dtV >= 0.03f) {
             angularVelocity = pose.angleDegreesTo(ref.pose) / dtV
             linearVelocity = pose.translationDistanceTo(ref.pose) / dtV
+        }
+
+        // Angular acceleration: change of the (window-smoothed) angular velocity across the window.
+        var angularAccel = 0f
+        if (dtV >= 0.03f) {
+            velocityHistory.addLast(tNs to angularVelocity)
+            while (velocityHistory.size > 2 && tNs - velocityHistory.first().first > config.velocityWindowNs * 2) velocityHistory.removeFirst()
+            val refV = velocityHistory.firstOrNull { tNs - it.first <= config.velocityWindowNs } ?: velocityHistory.first()
+            val dtA = (tNs - refV.first) / 1e9f
+            if (dtA >= 0.1f) angularAccel = kotlin.math.abs(angularVelocity - refV.second) / dtA
         }
 
         // Spin window: decimated accumulated rotation and net translation.
@@ -124,7 +142,9 @@ class MotionTracker(private val config: MotionConfig = MotionConfig()) {
             keyframeCount = keyframeCount,
             pathLengthM = pathLength,
             maxDistanceFromStartM = maxDistFromStart,
-            newKeyframe = newKeyframe
+            newKeyframe = newKeyframe,
+            angularAccel = angularAccel,
+            distanceFromStartM = distFromStart
         )
         return last
     }

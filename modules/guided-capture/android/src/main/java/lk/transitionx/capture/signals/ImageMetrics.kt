@@ -22,7 +22,13 @@ data class ImageStats(
      * but sharp surface is not mistaken for blur, and portable across camera gains. Real capture:
      * median 0.67 while turning > 30 deg/s, 1.93 while still.
      */
-    val sharpness: Float = 0f
+    val sharpness: Float = 0f,
+    /**
+     * Percentage of 8x8 blocks holding a near-saturated pixel (>= 250) while the block mean is
+     * below 170: small glare highlights inside darker surroundings, typical of glass, mirrors and
+     * polished surfaces (S4, experimental). A bright window instead raises clippedHigh (L2).
+     */
+    val specularPercent: Float = 0f
 )
 
 object ImageMetrics {
@@ -32,6 +38,8 @@ object ImageMetrics {
     const val CLIP_LOW = 5
     const val BLOCK = 8
     const val TEXTURE_BLOCK_STD = 8f
+    const val SPECULAR_PEAK = 250
+    const val SPECULAR_BLOCK_MEAN = 170.0
 
     /**
      * Box-average downsample of a luminance plane to [TARGET_W] x [TARGET_H].
@@ -97,46 +105,56 @@ object ImageMetrics {
             if (v < CLIP_LOW) lo++
         }
         val blur = laplacianVariance(img, w, h)
-        val (texture, meanBlockVar) = blockContrast(img, w, h)
+        val blocks = blockStats(img, w, h)
         return ImageStats(
             blurScore = blur,
             brightness = sum.toFloat() / total,
             clippedHigh = hi * 100f / total,
             clippedLow = lo * 100f / total,
-            textureFraction = texture,
-            sharpness = blur / (meanBlockVar + 1f)
+            textureFraction = blocks.texturedFraction,
+            sharpness = blur / (blocks.meanVariance + 1f),
+            specularPercent = blocks.specularPercent
         )
     }
 
+    data class BlockStats(val texturedFraction: Float, val meanVariance: Float, val specularPercent: Float)
+
     /** (fraction of textured blocks, mean block variance) over non-overlapping BLOCK x BLOCK tiles. */
-    fun blockContrast(img: ByteArray, w: Int, h: Int): Pair<Float, Float> {
+    fun blockContrast(img: ByteArray, w: Int, h: Int): Pair<Float, Float> =
+        blockStats(img, w, h).let { it.texturedFraction to it.meanVariance }
+
+    fun blockStats(img: ByteArray, w: Int, h: Int): BlockStats {
         val bw = w / BLOCK
         val bh = h / BLOCK
-        if (bw == 0 || bh == 0) return 0f to 0f
+        if (bw == 0 || bh == 0) return BlockStats(0f, 0f, 0f)
         val thresholdVar = TEXTURE_BLOCK_STD * TEXTURE_BLOCK_STD
         val n = BLOCK * BLOCK
         var textured = 0
+        var specular = 0
         var varSum = 0.0
         for (by in 0 until bh) {
             for (bx in 0 until bw) {
                 var s = 0
                 var sq = 0L
+                var max = 0
                 for (y in by * BLOCK until (by + 1) * BLOCK) {
                     val r = y * w
                     for (x in bx * BLOCK until (bx + 1) * BLOCK) {
                         val v = img[r + x].toInt() and 0xFF
                         s += v
                         sq += (v * v).toLong()
+                        if (v > max) max = v
                     }
                 }
                 val mean = s.toDouble() / n
                 val variance = (sq.toDouble() / n - mean * mean).coerceAtLeast(0.0)
                 varSum += variance
                 if (variance > thresholdVar) textured++
+                if (max >= SPECULAR_PEAK && mean < SPECULAR_BLOCK_MEAN) specular++
             }
         }
         val blocks = bw * bh
-        return (textured.toFloat() / blocks) to (varSum / blocks).toFloat()
+        return BlockStats(textured.toFloat() / blocks, (varSum / blocks).toFloat(), specular * 100f / blocks)
     }
 
     /** Full measurement: downsample, then blur, brightness and clipping. */
