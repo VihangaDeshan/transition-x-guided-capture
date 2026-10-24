@@ -1,0 +1,26 @@
+# Export package format
+
+`formatVersion: 1.0`. Platform-neutral (TDD 15): poses are carried explicitly, so the package does
+not depend on reading the ARCore recording.
+
+```
+scan_<uuid>/
+  session.mp4     ARCore Recording API MP4 (plays as a normal video; also replayable by ARCore)
+  poses.jsonl     every frame: {"t":ns,"tx","ty","tz","qx","qy","qz","qw","tracking","failure"}   ← primary pose record
+  quality.jsonl   every analysed frame: the full SignalFrame (see CONTRACTS.md)                    ← replay input
+  alerts.jsonl    guidance events: SHOWN / DISMISSED (shownForMs) / SUPPRESSED (reason) / STATE, plus INTERRUPTION notes
+  coverage.json   {"method":"POSE_TRAIL", "surfacesSeenFromTwoPlusAngles":null, "trail":{...}}
+  summary.json    verdict, durations, tracking losses, warnings by rule, suppressed by rule
+  manifest.json   formatVersion, sessionId, device, camera intrinsics, session stats, recording status, versions
+  status.json     written on accept: {"accepted":true,"acceptedAt":...,"transfer":"MANUAL"}
+```
+
+Conventions: ARCore world frame (right-handed, +Y up, metres); `Camera.getPose()` (sensor pose);
+timestamps are `Frame.getTimestamp()` nanoseconds in every stream. Intrinsics are for the CPU image
+(`camera.intrinsicsFor = "cpu_image"`); the texture size used for recording is also given.
+
+On the phone the package lives in `Android/data/lk.transitionx.guidedcapture/files/sessions/` and the
+zip in `.../files/exports/`.
+
+## Changelog
+- **1.0** (2026-10-24) — first release.
