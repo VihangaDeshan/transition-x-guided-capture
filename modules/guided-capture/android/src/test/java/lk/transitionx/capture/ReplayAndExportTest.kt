@@ -108,7 +108,7 @@ class ReplayAndExportTest {
         val cam = ExportDocs.CameraInfo(640, 480, 1920, 1080, 30, 500f, 500f, 320f, 240f)
         val manifest = JsonLite.parseObject(JsonLite.write(
             ExportDocs.manifest(session, device, cam, CoverageState.POSE_TRAIL_ONLY, "1.0.0", "1.0-initial")))
-        assertEquals("1.1", manifest["formatVersion"])
+        assertEquals("1.2", manifest["formatVersion"])
         assertEquals("sensor", (manifest["camera"] as Map<*, *>)["imageOrientation"])
         assertEquals("SHA-256", (manifest["integrity"] as Map<*, *>)["algorithm"])
         assertEquals("POSE_TRAIL", (manifest["coverage"] as Map<*, *>)["method"])

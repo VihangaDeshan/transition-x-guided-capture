@@ -36,7 +36,10 @@ fun goodSignal(tMs: Long, keyframes: Int = (tMs / 300).toInt()) = SignalFrame(
     pathLengthM = keyframes * 0.15f,
     maxDistanceFromStartM = minOf(3f, keyframes * 0.1f),
     textureFraction = 0.6f,
-    sharpness = 2.0f
+    sharpness = 2.0f,
+    lookedUp = true,
+    lookedDown = true,
+    distanceFromStartM = minOf(3f, keyframes * 0.1f)
 )
 
 /** Motion blur as measured on the A55: low contrast-normalised sharpness while turning. */

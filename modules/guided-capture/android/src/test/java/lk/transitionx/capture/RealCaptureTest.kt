@@ -70,6 +70,15 @@ class RealCaptureTest {
         assertTrue("shown per minute = $perMinute", perMinute < 18) // v1.0: 25 shows = 18/min
     }
 
+    @Test fun redo_request_once_right_after_the_dark_spell() {
+        // T7: the 33-45 s dark stretch should produce exactly one "film that part again", after it.
+        val r = ReplayRunner.run(frames, thresholds)
+        val t0 = frames.first().timestampNs / 1_000_000
+        val t7 = r.alerts.filter { it.type == AlertType.SHOWN && it.ruleId == GuidanceRuleId.T7 }.map { (it.atMs - t0) / 1000.0 }
+        assertEquals(1, t7.size)
+        assertTrue("T7 at ${t7.first()} s", t7.first() in 45.0..52.0)
+    }
+
     @Test fun deterministic_on_real_data() {
         assertEquals(ReplayRunner.run(frames, thresholds).timeline, ReplayRunner.run(frames, thresholds).timeline)
     }
