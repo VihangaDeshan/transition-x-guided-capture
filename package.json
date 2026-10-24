@@ -14,7 +14,7 @@
   "dependencies": {
     "expo": "54.0.36",
     "react": "19.1.0",
-    "react-native": "0.81.5"
+    "react-native": "0.81.6"
   },
   "devDependencies": {
     "@types/jest": "29.5.14",
