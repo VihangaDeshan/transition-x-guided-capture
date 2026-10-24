@@ -54,8 +54,8 @@ class ReplayAndExportTest {
     @Test fun replay_matches_live_engine() {
         val frames = (0 until 600).map { i ->
             val t = i * 33L
-            goodSignal(t, keyframes = i / 20).copy(
-                blurScore = if (i in 150..220) 30f else 300f,
+            val base = goodSignal(t, keyframes = i / 20)
+            (if (i in 150..220) base.blurred() else base).copy(
                 windowRotationDeg = if (i in 300..360) 80f else 5f,
                 windowTranslationM = if (i in 300..360) 0.01f else 0.9f
             )
@@ -81,10 +81,10 @@ class ReplayAndExportTest {
     }
 
     @Test fun sweep_changes_warning_counts() {
-        val frames = (0 until 400).map { i -> goodSignal(i * 33L, keyframes = i / 20).copy(blurScore = 120f) }
-        val res = ReplayRunner.sweep(frames, Thresholds(), listOf(100f, 130f)) { t, v -> t.copy(blurEnter = v, blurExit = v + 50) }
-        assertNull(res.getValue(100f)[GuidanceRuleId.L3])
-        assertEquals(1, res.getValue(130f)[GuidanceRuleId.L3])
+        val frames = (0 until 400).map { i -> goodSignal(i * 33L, keyframes = i / 20).blurred(1.15f) }
+        val res = ReplayRunner.sweep(frames, Thresholds(), listOf(1.0f, 1.2f)) { t, v -> t.copy(sharpnessEnter = v, sharpnessExit = v + 0.3f) }
+        assertNull(res.getValue(1.0f)[GuidanceRuleId.L3])
+        assertEquals(1, res.getValue(1.2f)[GuidanceRuleId.L3])
     }
 
     @Test fun thresholds_from_json_override_only_given_keys() {
@@ -108,7 +108,9 @@ class ReplayAndExportTest {
         val cam = ExportDocs.CameraInfo(640, 480, 1920, 1080, 30, 500f, 500f, 320f, 240f)
         val manifest = JsonLite.parseObject(JsonLite.write(
             ExportDocs.manifest(session, device, cam, CoverageState.POSE_TRAIL_ONLY, "1.0.0", "1.0-initial")))
-        assertEquals("1.0", manifest["formatVersion"])
+        assertEquals("1.1", manifest["formatVersion"])
+        assertEquals("sensor", (manifest["camera"] as Map<*, *>)["imageOrientation"])
+        assertEquals("SHA-256", (manifest["integrity"] as Map<*, *>)["algorithm"])
         assertEquals("POSE_TRAIL", (manifest["coverage"] as Map<*, *>)["method"])
         assertEquals(500.0, (manifest["camera"] as Map<*, *>)["fx"])
         assertEquals("1.0-initial", (manifest["app"] as Map<*, *>)["thresholdsVersion"])

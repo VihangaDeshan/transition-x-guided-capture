@@ -8,7 +8,7 @@ import lk.transitionx.capture.guidance.EngineSummary
 
 object ExportDocs {
     /** Bump on any change to the package layout or field meaning; record it in docs/EXPORT_FORMAT.md. */
-    const val FORMAT_VERSION = "1.0"
+    const val FORMAT_VERSION = "1.1"
 
     data class DeviceInfo(
         val manufacturer: String,
@@ -87,7 +87,10 @@ object ExportDocs {
                 "textureWidth" to it.textureWidth, "textureHeight" to it.textureHeight,
                 "fps" to it.fps,
                 "fx" to it.fx, "fy" to it.fy, "cx" to it.cx, "cy" to it.cy,
-                "intrinsicsFor" to "cpu_image"
+                "intrinsicsFor" to "cpu_image",
+                // Frames are stored as the sensor delivers them (landscape), whatever the phone's
+                // orientation; poses are camera sensor poses, so they match the stored frames.
+                "imageOrientation" to "sensor"
             )
         },
         "session" to linkedMapOf(
@@ -102,7 +105,9 @@ object ExportDocs {
             "mode" to session.recordingMode,
             "ok" to session.recordingOk,
             "error" to session.recordingError,
-            "file" to session.videoFile
+            "file" to session.videoFile,
+            "videoWidth" to camera?.imageWidth,
+            "videoHeight" to camera?.imageHeight
         ),
         "coverage" to linkedMapOf("method" to coverage.method.name),
         "poseConvention" to linkedMapOf(
@@ -110,7 +115,14 @@ object ExportDocs {
             "pose" to "camera sensor pose (Camera.getPose), quaternion x,y,z,w",
             "timestamp" to "Frame.getTimestamp, nanoseconds"
         ),
-        "files" to listOf("session.mp4", "poses.jsonl", "quality.jsonl", "alerts.jsonl", "coverage.json", "summary.json", "manifest.json"),
+        "files" to listOf("session.mp4", "poses.jsonl", "quality.jsonl", "alerts.jsonl", "coverage.json",
+            "summary.json", "manifest.json", "status.json", PackageIntegrity.CHECKSUM_FILE),
+        "integrity" to linkedMapOf(
+            "algorithm" to "SHA-256",
+            "file" to PackageIntegrity.CHECKSUM_FILE,
+            "verify" to "sha256sum -c ${PackageIntegrity.CHECKSUM_FILE}",
+            "writtenAt" to "accept"
+        ),
         "app" to linkedMapOf("version" to appVersion, "thresholdsVersion" to thresholdsVersion)
     )
 
