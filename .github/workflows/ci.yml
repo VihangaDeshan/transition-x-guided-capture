@@ -42,7 +42,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.14.3"
       - run: gradle -p tools/engine-tests test --no-daemon
@@ -60,7 +60,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - run: npm ci
       - name: Release keystore (optional, from repository secrets)
         env:
