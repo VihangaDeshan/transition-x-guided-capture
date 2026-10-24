@@ -10,8 +10,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.opengl.GLES20
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.os.StatFs
 import android.util.Log
 import android.view.WindowManager
@@ -60,7 +58,6 @@ class CaptureController private constructor(private val context: Context) {
     @Volatile var emitter: ((String, Map<String, Any?>) -> Unit)? = null
     @Volatile var debugSignals: Boolean = false
 
-    private val main = Handler(Looper.getMainLooper())
     private val sessionLock = ReentrantLock()
     @Volatile private var session: Session? = null
     private var sessionResumed = false
@@ -159,7 +156,8 @@ class CaptureController private constructor(private val context: Context) {
     fun attachView(v: GuidedCaptureView) {
         view = v
         try {
-            if (session == null) session = createSession()
+            // ARCore samples create the session with the Activity; fall back to the app context.
+            if (session == null) session = createSession(v.appContext.currentActivity ?: context)
             resumeSession()
             v.glView.onResume()
         } catch (e: Exception) {
@@ -212,8 +210,8 @@ class CaptureController private constructor(private val context: Context) {
         releaseSession()
     }
 
-    private fun createSession(): Session {
-        val s = Session(context)
+    private fun createSession(sessionContext: Context): Session {
+        val s = Session(sessionContext)
         try {
             val filter = CameraConfigFilter(s)
                 .setTargetFps(EnumSet.of(CameraConfig.TargetFps.TARGET_FPS_30))

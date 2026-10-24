@@ -5,6 +5,7 @@ package lk.transitionx.capture.android
 
 import android.content.Context
 import android.opengl.GLSurfaceView
+import android.view.ViewGroup
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.views.ExpoView
 import javax.microedition.khronos.egl.EGLConfig
@@ -17,7 +18,7 @@ class GuidedCaptureView(context: Context, appContext: AppContext) : ExpoView(con
     private val controller = CaptureController.get(context)
 
     val glView: GLSurfaceView = GLSurfaceView(context).apply {
-        layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+        layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         preserveEGLContextOnPause = true
         setEGLContextClientVersion(2)
         setEGLConfigChooser(8, 8, 8, 8, 16, 0)
