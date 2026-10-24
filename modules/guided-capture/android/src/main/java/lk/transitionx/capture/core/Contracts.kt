@@ -32,10 +32,34 @@ data class CapturePose(
         return Math.toDegrees(2.0 * acos(clamped)).toFloat()
     }
 
+    /** Rotates vector (vx, vy, vz) by this pose's rotation (no translation). */
+    fun rotate(vx: Float, vy: Float, vz: Float): FloatArray {
+        // v' = v + 2w(q x v) + 2 q x (q x v)
+        val cx = qy * vz - qz * vy
+        val cy = qz * vx - qx * vz
+        val cz = qx * vy - qy * vx
+        val ccx = qy * cz - qz * cy
+        val ccy = qz * cx - qx * cz
+        val ccz = qx * cy - qy * cx
+        return floatArrayOf(vx + 2f * (qw * cx + ccx), vy + 2f * (qw * cy + ccy), vz + 2f * (qw * cz + ccz))
+    }
+
+    /** Unit viewing direction in world space (cameras look down -Z). */
+    fun forward(): FloatArray = rotate(0f, 0f, -1f)
+
+    /** Transforms a point from this pose's local frame to world space. */
+    fun transformPoint(x: Float, y: Float, z: Float): FloatArray {
+        val r = rotate(x, y, z)
+        return floatArrayOf(r[0] + tx, r[1] + ty, r[2] + tz)
+    }
+
     companion object {
         val IDENTITY = CapturePose(0f, 0f, 0f, 0f, 0f, 0f, 1f)
     }
 }
+
+/** Direction hint carried by C1, C2 and C4 so the interface can draw an arrow. */
+enum class Direction { LEFT, RIGHT, UP, DOWN, BEHIND }
 
 enum class TrackingStatus { TRACKING, PAUSED, STOPPED }
 
@@ -58,8 +82,15 @@ class CaptureFrame(
     val height: Int,
     /** Row stride of [lumaPlane] in bytes (>= width). */
     val rowStride: Int,
+    /** World-space points observed this frame, packed x,y,z (ARCore points and/or depth samples). */
     val featurePoints: FloatArray?,
-    val featureCount: Int
+    val featureCount: Int,
+    /** Median depth (m) at the centre of the view from the Depth API; null when unavailable. */
+    val centerDepthM: Float? = null,
+    /** Camera2 CONTROL_AF_STATE of this frame; -1 when unknown. */
+    val afState: Int = -1,
+    /** True when [featurePoints] include depth samples (enables VOXEL_GRID coverage). */
+    val pointsFromDepth: Boolean = false
 )
 
 /**
@@ -98,8 +129,35 @@ data class SignalFrame(
     /** Share of textured 8x8 blocks, 0..1; -1 when unknown (logs written before v1.1). */
     val textureFraction: Float = -1f,
     /** Contrast-normalised sharpness; -1 when unknown (logs written before v1.1). */
-    val sharpness: Float = -1f
-)
+    val sharpness: Float = -1f,
+    // --- v1.2 extensions (Phase 2 and 3) ---
+    /** Change of angular velocity, degrees per second squared (G5). */
+    val angularAccel: Float = 0f,
+    /** Camera2 autofocus state; -1 unknown (L5). */
+    val afState: Int = -1,
+    /** Share of 8x8 blocks holding a small glare highlight in a darker block, percent (S4). */
+    val specularPercent: Float = 0f,
+    /** Current distance from the start position, metres (C5). */
+    val distanceFromStartM: Float = 0f,
+    /** Coverage model: 0 none, 2 point-cloud angular, 3 voxel grid with depth. */
+    val coverageMethodCode: Int = 0,
+    val coverageObserved: Int = 0,
+    val coverageCovered: Int = 0,
+    /** Largest horizontal arc of the room never looked at, degrees (C1). */
+    val unseenArcDeg: Float = 0f,
+    /** Signed turn to the centre of that arc, degrees, + = right; null when none (C1). */
+    val unseenArcYawDeg: Float? = null,
+    val lookedUp: Boolean = false,
+    val lookedDown: Boolean = false,
+    /** Voxels in the current view, and the share of them seen from one angle only (C3). */
+    val viewVoxelCount: Int = 0,
+    val viewSingleAngleFraction: Float = 0f,
+    /** Signed turn towards a room corner with no observations, degrees; null when none (C4). */
+    val missingCornerYawDeg: Float? = null
+) {
+    val coverageFraction: Float
+        get() = if (coverageObserved == 0) 0f else coverageCovered.toFloat() / coverageObserved
+}
 
 enum class Severity { INFO, WARNING, CRITICAL }
 
@@ -128,8 +186,8 @@ enum class GuidanceRuleId(val tier: Int, val phase: Int) {
     T1(0, 1), T2(0, 1), T4(0, 1), T5(0, 1),
     G4(1, 1),
     G1(2, 1), L1(2, 1), L3(2, 1), S1(2, 1),
-    G2(3, 1), L2(3, 1), T6(3, 1), S2(3, 2),
-    L4(4, 2), L5(4, 2), S3(4, 2), T3(4, 2),
+    G2(3, 1), L2(3, 1), T6(3, 1), S2(3, 2), T7(3, 2),
+    G5(4, 2), L4(4, 2), L5(4, 2), S3(4, 2), T3(4, 2),
     G3(5, 1), C3(5, 2), C5(5, 2),
     C1(6, 2), C2(6, 2),
     C6(7, 1),
@@ -151,5 +209,7 @@ data class GuidanceState(
     val coverage: CoverageState,
     val canStop: Boolean,
     val escalated: Boolean,
-    val elapsedMs: Long
+    val elapsedMs: Long,
+    /** Arrow for directional rules (C1, C2, C4); null otherwise. */
+    val direction: Direction? = null
 )
