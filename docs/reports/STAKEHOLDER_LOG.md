@@ -1,6 +1,6 @@
 # Stakeholder Engagement Log
 
-Project: Guided Capture on a Phone (TransitionX 2026). Partner: Rysera Innovations. Team: RoboNet.
+Project: Guided Capture on a Phone (TransitionX 2026). Partner: Rysera Innovations. Team: RoboNex.
 Mentor: Savinu Anusara.
 
 ## Meetings and decisions

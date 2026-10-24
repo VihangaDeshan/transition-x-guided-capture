@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Project | Guided Capture on a Phone (TransitionX 2026, Rysera Innovations) |
-| Team | RoboNet |
+| Team | RoboNex |
 | Software version | App 1.2.0, release build 16 (24 Oct 2026), thresholds `1.2-phase23`, export format 1.2 |
 | Reporting period | 06 Sep 2026 to 24 Oct 2026 |
 | Reference device | Samsung Galaxy A55 5G (SM-A556E), Android 16 (API 36), ARCore 1.57 |
