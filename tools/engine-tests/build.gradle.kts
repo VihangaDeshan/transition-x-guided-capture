@@ -26,6 +26,7 @@ kotlin {
         }
         getByName("test") {
             kotlin.setSrcDirs(listOf("$base/test/java"))
+            resources.setSrcDirs(listOf("$base/test/resources"))
         }
     }
 }
