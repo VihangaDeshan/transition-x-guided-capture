@@ -1,12 +1,13 @@
 # First on-device capture — analysis and v1.1 changes
 
-**Capture:** `scan_77001a7f`, Samsung Galaxy A55 5G (SM-A556E), Android 16 (API 36), ARCore 1.57,
-app 1.0.0, thresholds `1.0-initial`, 83.5 s, furnished bedroom, accepted and shared via the share sheet.
+**Capture:** first on-device session, Samsung Galaxy A55 5G (SM-A556E), Android 16 (API 36), ARCore 1.57,
+app 1.0.0, thresholds `1.0-initial`, 83.5 s, furnished indoor room, accepted and shared via the share sheet.
 
 Method: every stream in the package was analysed, the 640×480 video was decoded and the image
 metrics recomputed from the recorded frames with the app's own `ImageMetrics` code, the session
 was replayed through the decision engine, and frames at every warning were inspected by eye.
-Images of the room are not committed (privacy); only numbers are.
+The recording is of a private home: no images, video or package files are published. Only
+aggregate measurements are reported here.
 
 ## 1. What worked
 
@@ -25,9 +26,9 @@ Images of the room are not committed (privacy); only numbers are.
 
 ### 2.1 S1 "blank wall" was a false alarm (10 shows, one lasting 15.5 s)
 The ARCore point cloud on this phone returned **0–11 points (p50 = 3, p95 = 39)** in a furnished
-room while tracking never failed, so `featureCount < 20` was true for **87 %** of the session. The
-frames at those moments show posters, shelves and printed boxes. The point count does not measure
-texture on this device.
+room while tracking never failed, so `featureCount < 20` was true for **87 %** of the session.
+Visual inspection confirmed that the scene was well textured at those moments. The point count
+does not measure texture on this device.
 
 **Fix:** S1 now uses an image measure — `textureFraction`, the share of 8×8 blocks (on the 160×120
 downsample) whose luminance standard deviation exceeds 8. On this session it is below 0.15 only
@@ -35,7 +36,7 @@ during the dark spell (33–45 s), which L1 already covers, so S1 also requires 
 ARCore `INSUFFICIENT_FEATURES` still triggers S1 directly.
 
 ### 2.2 L3 "blurry" fired on sharp but plain surfaces
-Raw Laplacian variance measures detail, not blur: a sharp plain ceiling scored 117–136 (< 100 enter,
+Raw Laplacian variance measures detail, not blur: a sharp, plain surface scored 117–136 (< 100 enter,
 < 150 exit). The message says "move more slowly", which is wrong advice there.
 
 **Fix:** `sharpness` = Laplacian variance ÷ (mean 8×8 block variance + 1), a contrast-normalised

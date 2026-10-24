@@ -43,6 +43,10 @@ when measured (TDD 7).
 
 📘 **Start here: [`docs/GUIDE.md`](docs/GUIDE.md)** — the whole system step by step with diagrams.
 
+**Project documents:** [Technical Design Document v1.0 (PDF)](docs/design/Guided_Capture_Technical_Design_v1.0.pdf) ·
+[Test and Validation Report](docs/reports/TEST_REPORT.md) · [Stakeholder Engagement Log](docs/reports/STAKEHOLDER_LOG.md) ·
+[First on-device capture analysis](docs/analysis/2026-10-24-first-device-capture.md)
+
 ## Repository layout
 
 ```
