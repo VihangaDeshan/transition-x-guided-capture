@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: Apache-2.0
+# Every push: JS tests + type check + licence audit, Kotlin engine tests on a plain JVM, and a
+# release APK (arm64) built from a clean clone. Pushes to main publish the APK as a GitHub Release,
+# so testers can install it on a phone without Android Studio.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  js:
+    name: JS tests, types, licences
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test -- --ci
+      - run: npm run licenses
+
+  engine:
+    name: Kotlin engine tests (JVM, no Android SDK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+      - run: gradle -p tools/engine-tests test --no-daemon
+
+  android:
+    name: Build release APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - name: Generate native project (Expo CNG)
+        run: npx expo prebuild --platform android --no-install
+      - name: Gradle assembleRelease (arm64-v8a)
+        working-directory: android
+        run: >
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          -PreactNativeArchitectures=arm64-v8a
+          -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g"
+      - name: Name the APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk "guided-capture-build${{ github.run_number }}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: guided-capture-apk
+          path: guided-capture-build*.apk
+          retention-days: 30
+
+  release:
+    name: Publish APK
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [js, engine, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: guided-capture-apk
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="build-${{ github.run_number }}"
+          gh release create "$TAG" guided-capture-build*.apk \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "Guided Capture build ${{ github.run_number }}" \
+            --notes "Release APK for Android (arm64). Open this page on the phone, tap the .apk, allow installing from this source. Commit ${{ github.sha }}."
